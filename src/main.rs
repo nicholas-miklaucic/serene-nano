@@ -40,6 +40,7 @@ impl EventHandler for Handler {
 
 #[group]
 #[commands(poetry_url)]
+#[commands(poem)]
 struct Poetry;
 
 #[group]
@@ -195,9 +196,25 @@ fn send_poem<'a, 'b>(
 }
 
 #[command]
+async fn poem(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    let query = args.rest();
+    let poem_opt = poetry::search_poem(query).await;
+    let res = msg
+        .channel_id
+        .send_message(&ctx.http, partial!(send_poem => poem_opt, _))
+        .await;
+
+    if let Err(why) = res {
+        println!("Error sending message: {:?}", why);
+    }
+
+    Ok(())
+}
+
+#[command]
 async fn poetry_url(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let url = args.rest();
-    let poem_opt = poetry::get_poem(url.to_string()).await;
+    let poem_opt = poetry::get_poem(url).await;
     let res = msg
         .channel_id
         .send_message(&ctx.http, partial!(send_poem => poem_opt, _))

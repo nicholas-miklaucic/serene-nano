@@ -17,23 +17,39 @@ pub(crate) struct Poem {
     pub url: String,
 }
 
+/// Searches for a poem matching the given query and returns the text of the
+/// first one that matches, or None if something went wrong.
+pub(crate) async fn search_poem(query: &str) -> Option<Poem> {
+    let client = reqwest::Client::new();
+    let r = client
+        .get("https://www.poetryfoundation.org/search")
+        .query(&[("query", query)])
+        .send()
+        .await
+        .ok()?;
+
+    let link = scraper::Selector::parse("h2 > a").unwrap();
+    let text = r.text().await.ok()?;
+    let a = scraper::Html::parse_fragment(&text)
+        .select(&link)
+        .next()
+        .and_then(|x| x.value().attr("href"))
+        .and_then(|x| Some(x.to_string()))?;
+
+    let mut url = "https://poetryfoundation.org".to_string();
+    url.push_str(&a);
+    get_poem(&url).await
+}
+
 /// Given a URL to a poem, returns the full Poem object.
-pub(crate) async fn get_poem(url: String) -> Option<Poem> {
-    let content = reqwest::get(&url).await;
-    match content.ok() {
-        None => None,
-        Some(req) => {
-            let req_text = req.text().await;
-            match req_text.ok() {
-                None => None,
-                Some(body) => parse_poem(url, body),
-            }
-        }
-    }
+pub(crate) async fn get_poem(url: &str) -> Option<Poem> {
+    let content = reqwest::get(url).await.ok()?;
+    let req_text = content.text().await.ok()?;
+    parse_poem(url, req_text)
 }
 
 /// Parses a poem given the URL and the HTML of the URL.
-fn parse_poem(url: String, content: String) -> Option<Poem> {
+fn parse_poem(url: &str, content: String) -> Option<Poem> {
     let html = scraper::Html::parse_fragment(&content);
     let div_poem = scraper::Selector::parse("div.o-poem").unwrap();
     let span_poet = scraper::Selector::parse("span.c-txt_attribution a").unwrap();
@@ -54,7 +70,7 @@ fn parse_poem(url: String, content: String) -> Option<Poem> {
                 poet,
                 poem,
                 title,
-                url,
+                url: url.to_string(),
             })
         }
     }
