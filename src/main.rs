@@ -4,7 +4,15 @@ mod poetry;
 mod rep;
 
 use regex::Regex;
-use serenity::{builder::CreateMessage, Result};
+use serenity::{
+    builder::{CreateInteractionResponse, CreateInteractionResponseData, CreateMessage},
+    model::{
+        interactions::application_command::ApplicationCommandInteractionDataOption,
+        prelude::Activity,
+    },
+    utils::Color,
+    Result,
+};
 use std::collections::HashSet;
 use std::env;
 use wikipedia;
@@ -13,7 +21,7 @@ use wikipedia;
 extern crate partial_application;
 
 use serenity::{
-    async_trait,
+    self, async_trait,
     client::bridge::gateway::{GatewayIntents, ShardId, ShardManager},
     framework::standard::{
         buckets::{LimitedFor, RevertBucket},
@@ -22,22 +30,52 @@ use serenity::{
         Args, CommandGroup, CommandOptions, CommandResult, DispatchError, HelpOptions, Reason,
         StandardFramework,
     },
-    http::Http,
+    http::{self, Http},
     model::{
         channel::{Channel, Message},
         gateway::Ready,
-        id::UserId,
+        id::{GuildId, UserId},
+        interactions::{
+            application_command::{
+                ApplicationCommand, ApplicationCommandInteractionDataOptionValue,
+                ApplicationCommandOptionType,
+            },
+            Interaction, InteractionResponseType,
+        },
         permissions::Permissions,
     },
+    prelude::*,
 };
-use serenity::{http, prelude::*};
 
 struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
-    async fn ready(&self, _: Context, ready: Ready) {
+    async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
+
+        ctx.set_activity(Activity::playing("with Sakamoto")).await;
+
+        let _commands =
+            ApplicationCommand::set_global_application_commands(&ctx.http, |commands| {
+                commands
+                    .create_application_command(|command| {
+                        command.name("ping").description("A ping command")
+                    })
+                    .create_application_command(|command| {
+                        command
+                            .name("leaderboard")
+                            .description("Get the reputation leaderboard")
+                            .create_option(|option| {
+                                option
+                                    .name("how_many_users")
+                                    .description("The number of leaders to show (default 10)")
+                                    .kind(ApplicationCommandOptionType::Integer)
+                                    .required(false)
+                            })
+                    })
+            })
+            .await;
     }
 
     async fn message(&self, _ctx: Context, _new_message: Message) {
@@ -51,6 +89,56 @@ impl EventHandler for Handler {
             }
         }
     }
+
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        if let Interaction::ApplicationCommand(command) = interaction {
+            if let Err(why) = command
+                .create_interaction_response(&ctx.http, |response| {
+                    response
+                        .kind(InteractionResponseType::ChannelMessageWithSource)
+                        .interaction_response_data(|msg| match command.data.name.as_str() {
+                            "ping" => msg.content("Pong!"),
+                            "leaderboard" => {
+                                let n = command
+                                    .data
+                                    .options
+                                    .get(0)
+                                    .and_then(|x| x.resolved.as_ref())
+                                    .unwrap_or(
+                                        &ApplicationCommandInteractionDataOptionValue::Integer(10),
+                                    );
+
+                                if let &ApplicationCommandInteractionDataOptionValue::Integer(n) = n
+                                {
+                                    if let Ok(leaders) = rep::top_rep(n as isize) {
+                                        let mut list = String::from("");
+                                        for (user_name, rep) in leaders {
+                                            list.push_str(&format!(
+                                                "**{}** \u{2014} **{}** rep\n",
+                                                user_name, rep
+                                            ));
+                                        }
+                                        msg.create_embed(|emb| {
+                                            emb.title("Reputation Leaderboard")
+                                                .color(Color::PURPLE)
+                                                .field("Leaders", list, false)
+                                        })
+                                    } else {
+                                        msg.content("Uh-oh! I'm having a moment...")
+                                    }
+                                } else {
+                                    msg.content("Couldn't get leaderboard :(")
+                                }
+                            }
+                            _ => msg.content("Drawing a blank...".to_string()),
+                        })
+                })
+                .await
+            {
+                println!("Cannot respond to slash command: {}", why);
+            }
+        };
+    }
 }
 
 #[group]
@@ -63,72 +151,19 @@ struct Poetry;
 struct Wiki;
 
 #[group]
-#[commands(ping)]
 struct General;
 
-#[tokio::main]
-async fn main() {
-    // Configure the client with your Discord bot token in the environment.
-    let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
-
-    let http = Http::new_with_token(&token);
-
-    // We will fetch your bot's owners and id
-    let (owners, bot_id) = match http.get_current_application_info().await {
-        Ok(info) => {
-            let mut owners = HashSet::new();
-            if let Some(team) = info.team {
-                owners.insert(team.owner_user_id);
-            } else {
-                owners.insert(info.owner.id);
-            }
-            match http.get_current_user().await {
-                Ok(bot_id) => (owners, bot_id.id),
-                Err(why) => panic!("Could not access the bot id: {:?}", why),
-            }
-        }
-        Err(why) => panic!("Could not access application info: {:?}", why),
-    };
-
-    let framework = StandardFramework::new()
-        .configure(|c| {
-            c.with_whitespace(true)
-                .on_mention(Some(bot_id))
-                .prefix("nano, ")
-                // In this case, if "," would be first, a message would never
-                // be delimited at ", ", forcing you to trim your arguments if you
-                // want to avoid whitespaces at the start of each.
-                .delimiters(vec![", ", ","])
-                // Sets the bot's owners. These will be used for commands that
-                // are owners only.
-                .owners(owners)
-        })
-        .group(&POETRY_GROUP)
-        .group(&WIKI_GROUP)
-        .group(&GENERAL_GROUP);
-
-    let mut client = Client::builder(&token)
-        .event_handler(Handler)
-        .framework(framework)
-        .await
-        .expect("Error creating client!");
-    // For this example to run properly, the "Presence Intent" and "Server Members Intent"
-    // options need to be enabled.
-    // These are needed so the `required_permissions` macro works on the commands that need to
-    // use it.
-    // You will need to enable these 2 options on the bot application, and possibly wait up to 5
-    // minutes.
-    // .intents(GatewayIntents::all())
-    // .await
-    // .expect("Err creating client");
-
-    // Finally, start a single shard, and start listening to events.
-    //
-    // Shards will automatically attempt to reconnect, and will perform
-    // exponential backoff until it reconnects.
-    if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
-    }
+#[help]
+async fn my_help(
+    context: &Context,
+    msg: &Message,
+    args: Args,
+    help_options: &'static HelpOptions,
+    groups: &[&'static CommandGroup],
+    owners: HashSet<UserId>,
+) -> CommandResult {
+    let _ = help_commands::with_embeds(context, msg, args, help_options, groups, owners).await;
+    Ok(())
 }
 
 // #[tokio::main]
@@ -150,26 +185,6 @@ async fn main() {
 //         println!("An error occurred while running the client: {:?}", why);
 //     }
 // }
-
-#[command]
-async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
-    let wiki = wikipedia::Wikipedia::<wikipedia::http::default::Client>::default();
-    let page = wiki.page_from_title("Riemann zeta function".to_owned());
-    let wiki_text = page.get_summary().unwrap();
-    // hacky way of avoiding huge newlines around math text: work on making this better in the
-    // future
-    let re1 = Regex::new(r"\n +").unwrap();
-    let re2 = Regex::new(r"(?P<first>\w+)\{.*\}").unwrap();
-    let intermediate = re1.replace_all(&wiki_text, "");
-    let processed = re2.replace_all(&intermediate, "$first");
-    let sentences: Vec<&str> = processed.split(". ").take(3).collect();
-    msg.reply(ctx, "Gimme a sec....").await?;
-    if let Err(why) = msg.reply(ctx, sentences.join(". ")).await {
-        dbg!(why);
-    }
-
-    Ok(())
-}
 
 #[command]
 async fn wiki(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
@@ -240,4 +255,77 @@ async fn poetry_url(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     }
 
     Ok(())
+}
+
+#[tokio::main]
+async fn main() {
+    // Configure the client with your Discord bot token in the environment.
+    let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
+
+    // The Application Id is usually the Bot User Id.
+    let application_id: u64 = env::var("APPLICATION_ID")
+        .expect("Expected an application id in the environment")
+        .parse()
+        .expect("application id is not a valid id");
+
+    let http = Http::new_with_token(&token);
+
+    // We will fetch your bot's owners and id
+    let (owners, bot_id) = match http.get_current_application_info().await {
+        Ok(info) => {
+            let mut owners = HashSet::new();
+            if let Some(team) = info.team {
+                owners.insert(team.owner_user_id);
+            } else {
+                owners.insert(info.owner.id);
+            }
+            match http.get_current_user().await {
+                Ok(bot_id) => (owners, bot_id.id),
+                Err(why) => panic!("Could not access the bot id: {:?}", why),
+            }
+        }
+        Err(why) => panic!("Could not access application info: {:?}", why),
+    };
+
+    let framework = StandardFramework::new()
+        .configure(|c| {
+            c.with_whitespace(true)
+                .on_mention(Some(bot_id))
+                .prefix("nano, ")
+                // In this case, if "," would be first, a message would never
+                // be delimited at ", ", forcing you to trim your arguments if you
+                // want to avoid whitespaces at the start of each.
+                .delimiters(vec![", ", ","])
+                // Sets the bot's owners. These will be used for commands that
+                // are owners only.
+                .owners(owners)
+        })
+        .group(&POETRY_GROUP)
+        .group(&WIKI_GROUP)
+        .group(&GENERAL_GROUP)
+        .help(&MY_HELP);
+
+    let mut client = Client::builder(&token)
+        .event_handler(Handler)
+        .application_id(application_id)
+        .framework(framework)
+        .await
+        .expect("Error creating client!");
+    // For this example to run properly, the "Presence Intent" and "Server Members Intent"
+    // options need to be enabled.
+    // These are needed so the `required_permissions` macro works on the commands that need to
+    // use it.
+    // You will need to enable these 2 options on the bot application, and possibly wait up to 5
+    // minutes.
+    // .intents(GatewayIntents::all())
+    // .await
+    // .expect("Err creating client");
+
+    // Finally, start a single shard, and start listening to events.
+    //
+    // Shards will automatically attempt to reconnect, and will perform
+    // exponential backoff until it reconnects.
+    if let Err(why) = client.start().await {
+        println!("Client error: {:?}", why);
+    }
 }

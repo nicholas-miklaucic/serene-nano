@@ -9,7 +9,7 @@ use serenity::prelude::*;
 
 /// Thanks the given user, returning the new reputation of that user. Does no checking on validity.
 fn thank_user(user: &User, con: &mut redis::Connection) -> redis::RedisResult<usize> {
-    con.zincr("reputation", user.id.0, 1_usize)
+    con.zincr("reputation", &user.name, 1_usize)
 }
 
 /// Checks if a given thanker-thankee relationship is allowed at this moment. The original server
@@ -70,4 +70,12 @@ pub(crate) async fn thank(ctx: &Context, msg: &Message) -> redis::RedisResult<()
     }
 
     Ok(())
+}
+
+/// Returns a list of the top n users and their reputations.
+pub(crate) fn top_rep(n: isize) -> redis::RedisResult<Vec<(String, usize)>> {
+    let client = redis::Client::open(REDIS_URL)?;
+    let mut con = client.get_connection()?;
+
+    con.zrevrange_withscores("reputation", 0, n - 1)
 }

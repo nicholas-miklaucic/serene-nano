@@ -21,10 +21,12 @@ features = [
     "client",
     "framework",
     "gateway",
+    "cache",
     "http",
     "model",
+    "unstable_discord_api",
     "standard_framework",
     "utils",
     "rustls_backend",
 ]
-version = "0.10"
+version = "0.10.9"
