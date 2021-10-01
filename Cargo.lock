@@ -193,6 +193,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "combine"
+version = "4.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a909e4d93292cd8e9c42e189f61681eff9d67b6541f96b8a1a737f23737bd001"
+dependencies = [
+ "bytes 1.1.0",
+ "memchr",
+]
+
+[[package]]
 name = "command_attr"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1115,6 +1125,7 @@ name = "nano-bot"
 version = "0.1.0"
 dependencies = [
  "partial_application",
+ "redis",
  "regex",
  "reqwest 0.11.4",
  "scraper",
@@ -1717,6 +1728,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "redis"
+version = "0.21.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "202c5bf92cad3d57605c366e644a7fbf305a83f19754fc66678c6265dcc9b8b4"
+dependencies = [
+ "async-trait",
+ "combine",
+ "dtoa",
+ "itoa",
+ "percent-encoding 2.1.0",
+ "sha1",
+ "url 2.2.2",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.1.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2112,6 +2138,12 @@ dependencies = [
  "digest",
  "opaque-debug",
 ]
+
+[[package]]
+name = "sha1"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2579985fda508104f7587689507983eadd6a6e84dd35d6d115361f530916fa0d"
 
 [[package]]
 name = "siphasher"

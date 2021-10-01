@@ -1,4 +1,7 @@
+mod acarole;
+mod config;
 mod poetry;
+mod rep;
 
 use regex::Regex;
 use serenity::{builder::CreateMessage, Result};
@@ -35,6 +38,18 @@ struct Handler;
 impl EventHandler for Handler {
     async fn ready(&self, _: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
+    }
+
+    async fn message(&self, _ctx: Context, _new_message: Message) {
+        // very important! this avoids infinite loops and whatnot
+        if !_new_message.author.bot {
+            let thank_re = Regex::new(r"(?i)thank").unwrap();
+            if thank_re.is_match(&_new_message.content) && !_new_message.mentions.is_empty() {
+                if let Err(err) = rep::thank(&_ctx, &_new_message).await {
+                    println!("Something went wrong! {}", err);
+                }
+            }
+        }
     }
 }
 
