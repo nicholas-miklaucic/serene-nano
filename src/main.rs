@@ -6,11 +6,12 @@ mod rep;
 use regex::Regex;
 use serenity::{
     builder::{CreateInteractionResponse, CreateInteractionResponseData, CreateMessage},
+    cache::Cache,
     model::{
         interactions::application_command::ApplicationCommandInteractionDataOption,
         prelude::Activity,
     },
-    utils::Color,
+    utils::{content_safe, Color, ContentSafeOptions, MessageBuilder},
     Result,
 };
 use std::collections::HashSet;
@@ -74,6 +75,18 @@ impl EventHandler for Handler {
                                     .required(false)
                             })
                     })
+                    .create_application_command(|command| {
+                        command
+                            .name("say")
+                            .description("Have Nano say something")
+                            .create_option(|option| {
+                                option
+                                    .name("message")
+                                    .description("What to say")
+                                    .kind(ApplicationCommandOptionType::String)
+                                    .required(true)
+                            })
+                    })
             })
             .await;
     }
@@ -81,10 +94,34 @@ impl EventHandler for Handler {
     async fn message(&self, _ctx: Context, _new_message: Message) {
         // very important! this avoids infinite loops and whatnot
         if !_new_message.author.bot {
-            let thank_re = Regex::new(r"(?i)thank").unwrap();
+            let thank_re = Regex::new(r"(?i)(than[kx])|(tysm)").unwrap();
             if thank_re.is_match(&_new_message.content) && !_new_message.mentions.is_empty() {
                 if let Err(err) = rep::thank(&_ctx, &_new_message).await {
                     println!("Something went wrong! {}", err);
+                }
+            } else if _new_message.mentions_me(&_ctx).await.unwrap_or(false) {
+                let bad_re = Regex::new(r"(?i)(bad)").unwrap();
+                let good_re =
+                    Regex::new(r"(?i)(good bot)|(good job)|(nice work)|(nailed it)|(nice job)")
+                        .unwrap();
+                if bad_re.is_match(&_new_message.content) {
+                    _new_message
+                        .reply(
+                            &_ctx,
+                            MessageBuilder::new()
+                                .push("https://c.tenor.com/8QjR5hC91b0AAAAC/nichijou-nano.gif")
+                                .build(),
+                        )
+                        .await;
+                } else if good_re.is_match(&_new_message.content) {
+                    _new_message
+                        .reply(
+                            &_ctx,
+                            MessageBuilder::new()
+                                .push("https://i.imgur.com/bgiANhm.gif")
+                                .build(),
+                        )
+                        .await;
                 }
             }
         }
@@ -95,7 +132,9 @@ impl EventHandler for Handler {
             if let Err(why) = command
                 .create_interaction_response(&ctx.http, |response| {
                     response
-                        .kind(InteractionResponseType::ChannelMessageWithSource)
+                        .kind(match command.data.name.as_str() {
+                            _ => InteractionResponseType::ChannelMessageWithSource,
+                        })
                         .interaction_response_data(|msg| match command.data.name.as_str() {
                             "ping" => msg.content("Pong!"),
                             "leaderboard" => {
@@ -130,6 +169,22 @@ impl EventHandler for Handler {
                                     msg.content("Couldn't get leaderboard :(")
                                 }
                             }
+                            "say" => {
+                                let message = command
+                                    .data
+                                    .options
+                                    .get(0)
+                                    .and_then(|x| x.resolved.as_ref());
+
+                                if let Some(ApplicationCommandInteractionDataOptionValue::String(
+                                    content,
+                                )) = message
+                                {
+                                    msg.content(content).allowed_mentions(|am| am.empty_parse())
+                                } else {
+                                    msg.content("Couldn't say nothin' :()")
+                                }
+                            }
                             _ => msg.content("Drawing a blank...".to_string()),
                         })
                 })
@@ -151,6 +206,7 @@ struct Poetry;
 struct Wiki;
 
 #[group]
+#[commands(say)]
 struct General;
 
 #[help]
@@ -252,6 +308,23 @@ async fn poetry_url(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
     if let Err(why) = res {
         println!("Error sending message: {:?}", why);
+    }
+
+    Ok(())
+}
+
+#[command]
+async fn say(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    let message = args.rest();
+    let opts = match msg.guild_id {
+        Some(id) => ContentSafeOptions::default().display_as_member_from(id),
+        None => ContentSafeOptions::default(),
+    };
+    if let Err(why) = msg
+        .reply(ctx, content_safe(ctx, message, &opts).await)
+        .await
+    {
+        println!("Error saying message: {:?}", why);
     }
 
     Ok(())
