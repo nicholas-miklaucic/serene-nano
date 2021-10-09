@@ -2,7 +2,9 @@ mod acarole;
 mod config;
 mod poetry;
 mod rep;
+mod translate;
 
+use lingua::Language;
 use regex::Regex;
 use serenity::{
     builder::{CreateInteractionResponse, CreateInteractionResponseData, CreateMessage},
@@ -16,6 +18,7 @@ use serenity::{
 };
 use std::collections::HashSet;
 use std::env;
+use translate::detection::detect_language;
 use wikipedia;
 
 #[macro_use]
@@ -87,6 +90,30 @@ impl EventHandler for Handler {
                                     .required(true)
                             })
                     })
+                    .create_application_command(|command| {
+                        command
+                            .name("reputation")
+                            .description("Get the rep of a user")
+                            .create_option(|option| {
+                                option
+                                    .name("user")
+                                    .description("The user to get rep for (defaults to you)")
+                                    .kind(ApplicationCommandOptionType::User)
+                                    .required(false)
+                            })
+                    })
+                    .create_application_command(|command| {
+                        command
+                            .name("thank")
+                            .description("Thank a user")
+                            .create_option(|option| {
+                                option
+                                    .name("user")
+                                    .description("The user to thank")
+                                    .kind(ApplicationCommandOptionType::User)
+                                    .required(true)
+                            })
+                    })
             })
             .await;
     }
@@ -94,7 +121,7 @@ impl EventHandler for Handler {
     async fn message(&self, _ctx: Context, _new_message: Message) {
         // very important! this avoids infinite loops and whatnot
         if !_new_message.author.bot {
-            let thank_re = Regex::new(r"(?i)(than[kx])|(tysm)").unwrap();
+            let thank_re = Regex::new(r"(?i)(than[kx])|(tysm)|(^ty)|(\s+ty\s+)").unwrap();
             if thank_re.is_match(&_new_message.content) && !_new_message.mentions.is_empty() {
                 if let Err(err) = rep::thank(&_ctx, &_new_message).await {
                     println!("Something went wrong! {}", err);
@@ -122,6 +149,31 @@ impl EventHandler for Handler {
                                 .build(),
                         )
                         .await;
+                }
+            } else {
+                match detect_language(&_new_message.content) {
+                    // only translate for non-English text detected with high probability
+                    Some(Language::English) => (),
+                    None => (),
+                    Some(other) => {
+                        match translate::translate(
+                            &_new_message.content,
+                            Some(other),
+                            Language::English,
+                        )
+                        .await
+                        {
+                            Ok(result) => {
+                                if result == _new_message.content {
+                                    println!("Translation detection failed");
+                                    dbg!(result.clone());
+                                } else if let Err(why) = _new_message.reply(&_ctx, result).await {
+                                    println!("Error sending message: {}", why);
+                                }
+                            }
+                            Err(e) => println!("Error translating: {}", e),
+                        }
+                    }
                 }
             }
         }
@@ -183,6 +235,51 @@ impl EventHandler for Handler {
                                     msg.content(content).allowed_mentions(|am| am.empty_parse())
                                 } else {
                                     msg.content("Couldn't say nothin' :()")
+                                }
+                            }
+                            "reputation" => {
+                                let message = command
+                                    .data
+                                    .options
+                                    .get(0)
+                                    .and_then(|x| x.resolved.as_ref());
+
+                                let user = match message {
+                                    Some(ApplicationCommandInteractionDataOptionValue::User(
+                                        usr,
+                                        _,
+                                    )) => usr,
+                                    _ => &command.user,
+                                };
+
+                                if let Ok((rep, rank)) = rep::get_user_rep(&user) {
+                                    msg.content(format!(
+                                        "User **{}** has rep **{}** (rank **{}**)",
+                                        user.name, rep, rank
+                                    ))
+                                } else {
+                                    msg.content("Couldn't find user :(")
+                                }
+                            }
+                            "thank" => {
+                                let message = command
+                                    .data
+                                    .options
+                                    .get(0)
+                                    .and_then(|x| x.resolved.as_ref());
+
+                                let user = match message {
+                                    Some(ApplicationCommandInteractionDataOptionValue::User(
+                                        usr,
+                                        _,
+                                    )) => usr,
+                                    _ => &command.user,
+                                };
+
+                                if let Ok(string) = rep::thank_slash(&command.user, user) {
+                                    msg.content(string)
+                                } else {
+                                    msg.content("The database broke! Pollards! POOOLLLLAAARRDDSSS!")
                                 }
                             }
                             _ => msg.content("Drawing a blank...".to_string()),
