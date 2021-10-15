@@ -4,11 +4,12 @@ mod poetry;
 mod rep;
 mod translate;
 
-use lingua::Language;
+use lingua::{IsoCode639_1, Language};
 use regex::Regex;
 use serenity::{
     builder::{CreateInteractionResponse, CreateInteractionResponseData, CreateMessage},
     cache::Cache,
+    framework::standard::Delimiter,
     model::{
         interactions::application_command::ApplicationCommandInteractionDataOption,
         prelude::Activity,
@@ -16,8 +17,12 @@ use serenity::{
     utils::{content_safe, Color, ContentSafeOptions, MessageBuilder},
     Result,
 };
-use std::collections::HashSet;
 use std::env;
+use std::str::FromStr;
+use std::{
+    collections::{HashMap, HashSet},
+    string::ParseError,
+};
 use translate::detection::detect_language;
 use wikipedia;
 
@@ -114,6 +119,54 @@ impl EventHandler for Handler {
                                     .required(true)
                             })
                     })
+                    .create_application_command(|command| {
+                        command
+                            .name("translate")
+                            .description("Translate text")
+                            // .create_option(|option| {
+                            //     let source = option
+                            //         .name("source")
+                            //         .description("The source language (auto-detects if not given)")
+                            //         .kind(ApplicationCommandOptionType::String)
+                            //         .required(false);
+                            //     for lang_name in translate::available_langs::available_lang_names()
+                            //     {
+                            //         source.add_string_choice(&lang_name, &lang_name);
+                            //     }
+                            //     source
+                            // })
+                            .create_option(|option| {
+                                let mut target = option
+                                    .name("target")
+                                    .description("The target language (defaults to English)")
+                                    .kind(ApplicationCommandOptionType::String)
+                                    .required(false);
+                                for lang_name in translate::available_langs::available_lang_names()
+                                {
+                                    target = target.add_string_choice(&lang_name, &lang_name);
+                                }
+                                target
+                            })
+                            .create_option(|option| {
+                                option
+                                    .name("text")
+                                    .description("The text to translate")
+                                    .kind(ApplicationCommandOptionType::String)
+                                    .required(true)
+                            })
+                    })
+                    .create_application_command(|command| {
+                        command
+                            .name("texify")
+                            .description("Translate to LaTeX")
+                            .create_option(|option| {
+                                option
+                                    .name("message")
+                                    .description("Input to translate")
+                                    .kind(ApplicationCommandOptionType::String)
+                                    .required(true)
+                            })
+                    })
             })
             .await;
     }
@@ -181,6 +234,46 @@ impl EventHandler for Handler {
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(command) = interaction {
+            let data = match command.data.name.as_str() {
+                "translate" => {
+                    let mut options = HashMap::new();
+                    for opt in &command.data.options {
+                        if let Some(serde_json::value::Value::String(val)) = &opt.value {
+                            options.insert(opt.name.as_str(), val);
+                        }
+                    }
+                    if !options.contains_key("text") {
+                        "No text!".to_string()
+                    } else {
+                        match translate::translate(
+                            options.get("text").unwrap_or(&&("Peligro!".to_string())),
+                            options
+                                .get("source")
+                                .and_then(|l| translate::available_langs::get_language(l.as_str())),
+                            // default target language is English
+                            translate::available_langs::get_language(
+                                options.get("target").unwrap_or(&&"English".to_string()),
+                            )
+                            .unwrap_or(Language::English),
+                        )
+                        .await
+                        {
+                            Ok(result) => {
+                                format!(
+                                    "Source ({}): {}\n\n{}",
+                                    options.get("source").unwrap_or(&&"Auto".to_string()),
+                                    options.get("text").unwrap_or(&&"...".to_string()),
+                                    result
+                                )
+                            }
+                            Err(e) => {
+                                format!("Error translating: {}", e)
+                            }
+                        }
+                    }
+                }
+                _ => "".to_string(),
+            };
             if let Err(why) = command
                 .create_interaction_response(&ctx.http, |response| {
                     response
@@ -282,6 +375,28 @@ impl EventHandler for Handler {
                                     msg.content("The database broke! Pollards! POOOLLLLAAARRDDSSS!")
                                 }
                             }
+                            "translate" => msg.content(data),
+                            "texify" => {
+                                let message = command
+                                    .data
+                                    .options
+                                    .get(0)
+                                    .and_then(|x| x.resolved.as_ref());
+
+                                if let Some(ApplicationCommandInteractionDataOptionValue::String(
+                                    content,
+                                )) = message
+                                {
+                                    let texed = format!(
+                                        "${}$",
+                                        panmath::texify(content)
+                                            .unwrap_or("Couldn't parse <-<".to_string())
+                                    );
+                                    msg.content(texed).allowed_mentions(|am| am.empty_parse())
+                                } else {
+                                    msg.content("Couldn't say nothin' :()")
+                                }
+                            }
                             _ => msg.content("Drawing a blank...".to_string()),
                         })
                 })
@@ -304,6 +419,8 @@ struct Wiki;
 
 #[group]
 #[commands(say)]
+#[commands(tl)]
+#[commands(texify)]
 struct General;
 
 #[help]
@@ -411,6 +528,24 @@ async fn poetry_url(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 }
 
 #[command]
+async fn texify(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    let message = args.rest().to_string();
+    let texed = format!(
+        "${}$",
+        panmath::texify(&message).unwrap_or("Couldn't parse <-<".to_string())
+    );
+    let opts = match msg.guild_id {
+        Some(id) => ContentSafeOptions::default().display_as_member_from(id),
+        None => ContentSafeOptions::default(),
+    };
+    if let Err(why) = msg.reply(ctx, content_safe(ctx, texed, &opts).await).await {
+        println!("Error saying message: {:?}", why);
+    }
+
+    Ok(())
+}
+
+#[command]
 async fn say(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let message = args.rest();
     let opts = match msg.guild_id {
@@ -421,6 +556,57 @@ async fn say(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         .reply(ctx, content_safe(ctx, message, &opts).await)
         .await
     {
+        println!("Error saying message: {:?}", why);
+    }
+
+    Ok(())
+}
+
+#[command]
+async fn tl(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    let mut args = Args::new(args.message(), &[Delimiter::Single(' ')]);
+    let source_lang;
+    let target_lang;
+    let text;
+    if args.message().contains(">") {
+        let source_str: String = args.parse().unwrap();
+        let source = source_str.to_uppercase().parse();
+        source_lang = source
+            .and_then(|c| Ok(Language::from_iso_code_639_1(&c)))
+            .ok();
+        args.advance();
+        args.advance();
+        let target_str: String = args.parse().unwrap();
+        dbg!(target_str.clone());
+        let target = target_str.to_uppercase().parse();
+        target_lang = target
+            .and_then(|c| Ok(Language::from_iso_code_639_1(&c)))
+            .unwrap_or(Language::English);
+
+        args.advance();
+        text = args.remains().unwrap_or("");
+    } else {
+        text = args.message();
+        source_lang = None;
+        target_lang = Language::English;
+    }
+
+    let reply = match translate::translate(text, source_lang.clone(), target_lang.clone()).await {
+        Ok(result) => format!(
+            "{:?} → {:?}\nSource: {}\nTranslation: {}",
+            source_lang.unwrap_or(Language::English),
+            target_lang,
+            text,
+            result
+        ),
+        Err(e) => format!("Error while translating: {:?}", e),
+    };
+
+    let opts = match msg.guild_id {
+        Some(id) => ContentSafeOptions::default().display_as_member_from(id),
+        None => ContentSafeOptions::default(),
+    };
+    if let Err(why) = msg.reply(ctx, content_safe(ctx, reply, &opts).await).await {
         println!("Error saying message: {:?}", why);
     }
 

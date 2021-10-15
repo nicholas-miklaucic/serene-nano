@@ -33,3 +33,6 @@ features = [
     "rustls_backend",
 ]
 version = "0.10.9"
+
+[dependencies.panmath]
+path = "../panmath"

@@ -33,3 +33,23 @@ pub(crate) const AVAILABLE_LANGS: [Language; 24] = [
     Language::Swedish,
     Language::Chinese,
 ];
+
+/// Gets the name of the language.
+pub(crate) fn lang_name(lang: &Language) -> String {
+    format!("{:?}", lang)
+}
+
+/// Gets the available language names.
+pub(crate) fn available_lang_names() -> Vec<String> {
+    AVAILABLE_LANGS.iter().map(lang_name).collect()
+}
+
+/// Gets the language corresponding to the given name, failing if no such name exists.
+pub(crate) fn get_language(name: &str) -> Option<Language> {
+    for (lang, lang_name) in AVAILABLE_LANGS.iter().zip(available_lang_names().iter()) {
+        if name == lang_name {
+            return Some(lang.clone());
+        }
+    }
+    None
+}
