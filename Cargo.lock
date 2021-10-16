@@ -2048,6 +2048,7 @@ dependencies = [
  "lingua",
  "panmath",
  "partial_application",
+ "rand 0.8.4",
  "redis",
  "regex",
  "reqwest 0.11.4",

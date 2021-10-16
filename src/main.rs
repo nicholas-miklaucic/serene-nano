@@ -5,6 +5,8 @@ mod rep;
 mod translate;
 
 use lingua::{IsoCode639_1, Language};
+use rand;
+use rand::Rng;
 use regex::Regex;
 use serenity::{
     builder::{CreateInteractionResponse, CreateInteractionResponseData, CreateMessage},
@@ -421,6 +423,7 @@ struct Wiki;
 #[commands(say)]
 #[commands(tl)]
 #[commands(texify)]
+#[commands(ask)]
 struct General;
 
 #[help]
@@ -607,6 +610,42 @@ async fn tl(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         None => ContentSafeOptions::default(),
     };
     if let Err(why) = msg.reply(ctx, content_safe(ctx, reply, &opts).await).await {
+        println!("Error saying message: {:?}", why);
+    }
+
+    Ok(())
+}
+
+/// Gives very real, totally-not-random responses to any yes-or-no question your heart desires.
+#[command]
+async fn ask(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    let random_i = rand::thread_rng().gen_range(0..20);
+    const CHOICES: [&'static str; 20] = [
+        "It is certain.",
+        "It is decidedly so.",
+        "Without a doubt.",
+        "Yes, definitely.",
+        "You may rely on it.",
+        "As I see it, yes.",
+        "Most likely.",
+        "Outlook good.",
+        "Yes.",
+        "Signs point to yes.",
+        "Reply hazy, try again...",
+        "Ask again later...",
+        "Better not tell you now!",
+        "Cannot predict now...",
+        "Concentrate and ask again.",
+        "Don't count on it.",
+        "My reply is no.",
+        "My sources say no.",
+        "Outlook not so good.",
+        "Very doubtful.",
+    ];
+
+    let choice: String = CHOICES[random_i].to_string();
+
+    if let Err(why) = msg.reply(ctx, choice).await {
         println!("Error saying message: {:?}", why);
     }
 
