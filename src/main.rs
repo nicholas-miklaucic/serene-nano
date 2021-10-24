@@ -127,6 +127,13 @@ impl EventHandler for Handler {
                             .name("translate")
                             .description("Translate text")
                             .create_option(|option| {
+                                option
+                                    .name("text")
+                                    .description("The text to translate")
+                                    .kind(ApplicationCommandOptionType::String)
+                                    .required(true)
+                            })
+                            .create_option(|option| {
                                 let source = option
                                     .name("source")
                                     .description("The source language (auto-detects if not given)")
@@ -149,13 +156,6 @@ impl EventHandler for Handler {
                                     target = target.add_string_choice(&lang_name, &lang_name);
                                 }
                                 target
-                            })
-                            .create_option(|option| {
-                                option
-                                    .name("text")
-                                    .description("The text to translate")
-                                    .kind(ApplicationCommandOptionType::String)
-                                    .required(true)
                             })
                     })
                     .create_application_command(|command| {
@@ -184,6 +184,9 @@ impl EventHandler for Handler {
                     })
             })
             .await;
+        if let Err(e) = _commands {
+            println!("Error making slash commands: {}", e);
+        }
     }
 
     async fn message(&self, _ctx: Context, _new_message: Message) {
@@ -274,12 +277,7 @@ impl EventHandler for Handler {
                         .await
                         {
                             Ok(result) => {
-                                format!(
-                                    "Source ({}): {}\n\n{}",
-                                    options.get("source").unwrap_or(&&"Auto".to_string()),
-                                    options.get("text").unwrap_or(&&"...".to_string()),
-                                    result
-                                )
+                                format!("{}", result)
                             }
                             Err(e) => {
                                 format!("Error translating: {}", e)
@@ -402,12 +400,14 @@ impl EventHandler for Handler {
                                     content,
                                 )) = message
                                 {
-                                    let texed = format!(
-                                        "${}$",
-                                        panmath::texify(content)
-                                            .unwrap_or("Couldn't parse <-<".to_string())
-                                    );
-                                    msg.content(texed).allowed_mentions(|am| am.empty_parse())
+                                    let raw_tex = panmath::texify(&content).unwrap_or("Couldn't parse <-<".to_string());
+                                    let tex_url = format!(
+                                        r"https://latex.codecogs.com/png.latex?\dpi{{300}}{{\color[rgb]{{0.7,0.7,0.7}}{}",
+                                        raw_tex
+                                    )
+                                        .replace(" ", "&space;")
+                                        .replace("\\", "%5C");
+                                    msg.content(tex_url).allowed_mentions(|am| am.empty_parse())
                                 } else {
                                     msg.content("Couldn't say nothin' :()")
                                 }
@@ -592,10 +592,6 @@ async fn texify(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     )
     .replace(" ", "&space;")
     .replace("\\", "%5C");
-    let opts = match msg.guild_id {
-        Some(id) => ContentSafeOptions::default().display_as_member_from(id),
-        None => ContentSafeOptions::default(),
-    };
     if let Err(why) = msg.reply(ctx, tex_url).await {
         println!("Error saying message: {:?}", why);
     }
