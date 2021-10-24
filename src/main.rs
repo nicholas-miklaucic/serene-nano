@@ -5,6 +5,7 @@ mod rep;
 mod translate;
 
 use lingua::{IsoCode639_1, Language};
+use panmath;
 use rand;
 use rand::Rng;
 use regex::Regex;
@@ -125,18 +126,18 @@ impl EventHandler for Handler {
                         command
                             .name("translate")
                             .description("Translate text")
-                            // .create_option(|option| {
-                            //     let source = option
-                            //         .name("source")
-                            //         .description("The source language (auto-detects if not given)")
-                            //         .kind(ApplicationCommandOptionType::String)
-                            //         .required(false);
-                            //     for lang_name in translate::available_langs::available_lang_names()
-                            //     {
-                            //         source.add_string_choice(&lang_name, &lang_name);
-                            //     }
-                            //     source
-                            // })
+                            .create_option(|option| {
+                                let source = option
+                                    .name("source")
+                                    .description("The source language (auto-detects if not given)")
+                                    .kind(ApplicationCommandOptionType::String)
+                                    .required(false);
+                                for lang_name in translate::available_langs::available_lang_names()
+                                {
+                                    source.add_string_choice(&lang_name, &lang_name);
+                                }
+                                source
+                            })
                             .create_option(|option| {
                                 let mut target = option
                                     .name("target")
@@ -161,6 +162,18 @@ impl EventHandler for Handler {
                         command
                             .name("texify")
                             .description("Translate to LaTeX")
+                            .create_option(|option| {
+                                option
+                                    .name("message")
+                                    .description("Input to translate")
+                                    .kind(ApplicationCommandOptionType::String)
+                                    .required(true)
+                            })
+                    })
+                    .create_application_command(|command| {
+                        command
+                            .name("prettify")
+                            .description("Translate to fancy Unicode")
                             .create_option(|option| {
                                 option
                                     .name("message")
@@ -399,6 +412,27 @@ impl EventHandler for Handler {
                                     msg.content("Couldn't say nothin' :()")
                                 }
                             }
+                            "prettify" => {
+                                let message = command
+                                    .data
+                                    .options
+                                    .get(0)
+                                    .and_then(|x| x.resolved.as_ref());
+
+                                if let Some(ApplicationCommandInteractionDataOptionValue::String(
+                                    content,
+                                )) = message
+                                {
+                                    let texed = format!(
+                                        "${}$",
+                                        panmath::unicodeify(content)
+                                            .unwrap_or("Couldn't parse <-<".to_string())
+                                    );
+                                    msg.content(texed).allowed_mentions(|am| am.empty_parse())
+                                } else {
+                                    msg.content("Couldn't say nothin' :()")
+                                }
+                            }
                             _ => msg.content("Drawing a blank...".to_string()),
                         })
                 })
@@ -411,8 +445,7 @@ impl EventHandler for Handler {
 }
 
 #[group]
-#[commands(poetry_url)]
-#[commands(poem)]
+#[commands(poetry_url, poem)]
 struct Poetry;
 
 #[group]
@@ -420,10 +453,11 @@ struct Poetry;
 struct Wiki;
 
 #[group]
-#[commands(say)]
-#[commands(tl)]
-#[commands(texify)]
-#[commands(ask)]
+#[commands(texify, prettify, tex_source)]
+struct Math;
+
+#[group]
+#[commands(say, tl, ask)]
 struct General;
 
 #[help]
@@ -531,7 +565,7 @@ async fn poetry_url(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 }
 
 #[command]
-async fn texify(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+async fn tex_source(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let message = args.rest().to_string();
     let texed = format!(
         "${}$",
@@ -542,6 +576,48 @@ async fn texify(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         None => ContentSafeOptions::default(),
     };
     if let Err(why) = msg.reply(ctx, content_safe(ctx, texed, &opts).await).await {
+        println!("Error saying message: {:?}", why);
+    }
+
+    Ok(())
+}
+
+#[command]
+async fn texify(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    let message = args.rest().to_string();
+    let raw_tex = panmath::texify(&message).unwrap_or("Couldn't parse <-<".to_string());
+    let tex_url = format!(
+        r"https://latex.codecogs.com/png.latex?\dpi{{300}}{{\color[rgb]{{0.7,0.7,0.7}}{}",
+        raw_tex
+    )
+    .replace(" ", "&space;")
+    .replace("\\", "%5C");
+    let opts = match msg.guild_id {
+        Some(id) => ContentSafeOptions::default().display_as_member_from(id),
+        None => ContentSafeOptions::default(),
+    };
+    if let Err(why) = msg.reply(ctx, tex_url).await {
+        println!("Error saying message: {:?}", why);
+    }
+
+    Ok(())
+}
+
+#[command]
+async fn prettify(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    let message = args.rest().to_string();
+    let prettified = format!(
+        "{}",
+        panmath::unicodeify(&message).unwrap_or("Couldn't parse <-<".to_string())
+    );
+    let opts = match msg.guild_id {
+        Some(id) => ContentSafeOptions::default().display_as_member_from(id),
+        None => ContentSafeOptions::default(),
+    };
+    if let Err(why) = msg
+        .reply(ctx, content_safe(ctx, prettified, &opts).await)
+        .await
+    {
         println!("Error saying message: {:?}", why);
     }
 
@@ -697,6 +773,7 @@ async fn main() {
         })
         .group(&POETRY_GROUP)
         .group(&WIKI_GROUP)
+        .group(&MATH_GROUP)
         .group(&GENERAL_GROUP)
         .help(&MY_HELP);
 
