@@ -7,7 +7,7 @@
 use lingua::Language;
 
 // https://www.deepl.com/docs-api/translating-text/example/
-pub(crate) const AVAILABLE_LANGS: [Language; 24] = [
+pub(crate) const AVAILABLE_LANGS: [Language; 25] = [
     Language::Bulgarian,
     Language::Czech,
     Language::Danish,
@@ -18,6 +18,7 @@ pub(crate) const AVAILABLE_LANGS: [Language; 24] = [
     Language::Estonian,
     Language::Finnish,
     Language::French,
+    Language::Hindi,
     Language::Hungarian,
     Language::Italian,
     Language::Japanese,

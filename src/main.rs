@@ -2,12 +2,13 @@ mod acarole;
 mod config;
 mod poetry;
 mod rep;
+mod set;
 mod translate;
 
 use lingua::{IsoCode639_1, Language};
 use panmath;
-use rand;
 use rand::Rng;
+use rand::{self, prelude::IteratorRandom};
 use regex::Regex;
 use serenity::{
     builder::{CreateInteractionResponse, CreateInteractionResponseData, CreateMessage},
@@ -20,11 +21,14 @@ use serenity::{
     utils::{content_safe, Color, ContentSafeOptions, MessageBuilder},
     Result,
 };
-use std::env;
-use std::str::FromStr;
 use std::{
     collections::{HashMap, HashSet},
     string::ParseError,
+};
+use std::{env, fs::File};
+use std::{
+    io::{BufRead, BufReader},
+    str::FromStr,
 };
 use translate::detection::detect_language;
 use wikipedia;
@@ -96,6 +100,73 @@ impl EventHandler for Handler {
                                     .description("What to say")
                                     .kind(ApplicationCommandOptionType::String)
                                     .required(true)
+                            })
+                    })
+                    .create_application_command(|command| {
+                        let mut cmd = command
+                            .name("add_elements")
+                            .description("Add elements to a list (creating it if nonexistent)")
+                            .create_option(|option| {
+                                option
+                                    .name("list_name")
+                                    .description("The name of the list to add to")
+                                    .kind(ApplicationCommandOptionType::String)
+                                    .required(true)
+                            });
+
+                        for i in 1..=10 {
+                            cmd = cmd.create_option(|option| {
+                                option
+                                    .name(format!("element_{}", i))
+                                    .description("Value to add")
+                                    .kind(ApplicationCommandOptionType::String)
+                                    .required(false)
+                            });
+                        }
+
+                        cmd
+                    })
+                    .create_application_command(|command| {
+                        let mut cmd = command
+                            .name("rem_elements")
+                            .description("Remove elements from a list")
+                            .create_option(|option| {
+                                option
+                                    .name("list_name")
+                                    .description("The name of the list to add to")
+                                    .kind(ApplicationCommandOptionType::String)
+                                    .required(true)
+                            });
+
+                        for i in 1..=10 {
+                            cmd = cmd.create_option(|option| {
+                                option
+                                    .name(format!("element_{}", i))
+                                    .description("Value to remove")
+                                    .kind(ApplicationCommandOptionType::String)
+                                    .required(false)
+                            });
+                        }
+
+                        cmd
+                    })
+                    .create_application_command(|command| {
+                        command
+                            .name("get_list")
+                            .description("Get the elements from a user's list")
+                            .create_option(|option| {
+                                option
+                                    .name("list_name")
+                                    .description("The name of the list to add to")
+                                    .kind(ApplicationCommandOptionType::String)
+                                    .required(true)
+                            })
+                            .create_option(|option| {
+                                option
+                                    .name("user")
+                                    .description("The user to get the list from (default: you)")
+                                    .kind(ApplicationCommandOptionType::User)
+                                    .required(false)
                             })
                     })
                     .create_application_command(|command| {
@@ -182,6 +253,11 @@ impl EventHandler for Handler {
                                     .required(true)
                             })
                     })
+                    .create_application_command(|command| {
+                        command
+                            .name("topic")
+                            .description("Start a conversation with a random question")
+                    })
             })
             .await;
         if let Err(e) = _commands {
@@ -221,7 +297,7 @@ impl EventHandler for Handler {
                         )
                         .await;
                 }
-            } else {
+            } else if !&_new_message.content.starts_with("nano,") {
                 match detect_language(&_new_message.content) {
                     // only translate for non-English text detected with high probability
                     Some(Language::English) => (),
@@ -343,6 +419,27 @@ impl EventHandler for Handler {
                                     msg.content("Couldn't say nothin' :()")
                                 }
                             }
+                            "add_elements" => {
+                                let (msg, res) = set::add_elements_command(&command, msg);
+                                match res {
+                                    Ok(_) => msg,
+                                    Err(_) => msg.content("An error occured. Pollards, why? WHYYYYY"),
+                                }
+                            }
+                            "rem_elements" => {
+                                let (msg, res) = set::rem_elements_command(&command, msg);
+                                match res {
+                                    Ok(_) => msg,
+                                    Err(_) => msg.content("An error occured. Pollards, why? WHYYYYY"),
+                                }
+                            }
+                            "get_list" => {
+                                let (msg, res) = set::get_list_command(&command, msg);
+                                match res {
+                                    Ok(_) => msg,
+                                    Err(_) => msg.content("An error occured. Pollards, why? WHYYYYY"),
+                                }
+                            }
                             "reputation" => {
                                 let message = command
                                     .data
@@ -431,6 +528,24 @@ impl EventHandler for Handler {
                                     msg.content(texed).allowed_mentions(|am| am.empty_parse())
                                 } else {
                                     msg.content("Couldn't say nothin' :()")
+                                }
+                            }
+                            "topic" => {
+                                let f_res = File::open("./topics.txt");
+                                if let Ok(f) = f_res {
+                                    let mut reader = BufReader::new(f);
+                                    let mut rng = rand::thread_rng();
+                                    let choice = reader.lines().choose(&mut rng);
+                                    if let Some(Ok(topic)) = choice {
+                                        msg.content(topic)
+                                    }
+                                    else {
+                                        dbg!(choice);
+                                        msg.content("Something went wrong...".to_string())
+                                    }
+                                } else {
+                                    dbg!(f_res);
+                                    msg.content("Something went wrong...".to_string())
                                 }
                             }
                             _ => msg.content("Drawing a blank...".to_string()),
