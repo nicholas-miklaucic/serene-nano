@@ -1,8 +1,6 @@
-//! This module defines the languages that Nano can translate into and from. This is a simplified
-//! version of the true support of DeepL: only outer languages are listed, not the dialects that
-//! DeepL supports in output translations. This means that we can reuse the same list of languages
-//! everywhere, instead of having one for input and one for output (e.g., EN-US in one place and EN
-//! in another).
+//! This module defines the languages that Nano can translate into and from. The
+//! limiter here is the problem that Discord only supports 25 options, so if I
+//! want autocomplete in the slash command I can only pick 25.
 
 use lingua::Language;
 
