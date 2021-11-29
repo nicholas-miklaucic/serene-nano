@@ -32,7 +32,7 @@ features = [
     "unstable_discord_api",
     "standard_framework",
     "utils",
-    "rustls_backend",
+    "native_tls_backend",
 ]
 version = "0.10.9"
 
