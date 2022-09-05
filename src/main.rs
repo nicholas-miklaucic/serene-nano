@@ -4,6 +4,7 @@ mod poetry;
 mod rep;
 mod set;
 mod translate;
+mod weather;
 
 use lingua::{IsoCode639_1, Language};
 use panmath;
@@ -255,6 +256,25 @@ impl EventHandler for Handler {
                     })
                     .create_application_command(|command| {
                         command
+                            .name("weather")
+                            .description("Get the weather for a place")
+                            .create_option(|opt| {
+                                opt.name("location")
+                                    .description("Location")
+                                    .kind(ApplicationCommandOptionType::String)
+                                    .required(true)
+                            })
+                            .create_option(|opt| {
+                                opt.name("units")
+                                    .description("Measurement units to use")
+                                    .kind(ApplicationCommandOptionType::String)
+                                    .add_string_choice("imperial", "imperial")
+                                    .add_string_choice("metric", "metric")
+                                    .add_string_choice("scientific", "standard")
+                            })
+                    })
+                    .create_application_command(|command| {
+                        command
                             .name("topic")
                             .description("Start a conversation with a random question")
                     })
@@ -484,6 +504,25 @@ impl EventHandler for Handler {
                                 } else {
                                     msg.content("The database broke! Pollards! POOOLLLLAAARRDDSSS!")
                                 }
+                            },
+                            "weather" => {
+                                // parse arguments
+                                let mut units = "metric";
+                                let mut location = "New York, NY";
+                                for opt in &command.data.options {
+                                    match &opt.value {
+                                        Some(serde_json::Value::String(s)) => {
+                                            if opt.name.as_str() == "units" {
+                                                units = s.as_str();
+                                            } else if opt.name.as_str() == "location" {
+                                                location = s.as_str();
+                                            }
+                                        },
+                                        _ => {}
+                                    }
+                                }
+                                dbg!(location, units);
+                                weather::weather_msg(location, units, msg)
                             }
                             "translate" => msg.content(data),
                             "texify" => {
@@ -533,7 +572,7 @@ impl EventHandler for Handler {
                             "topic" => {
                                 let f_res = File::open("./topics.txt");
                                 if let Ok(f) = f_res {
-                                    let mut reader = BufReader::new(f);
+                                    let reader = BufReader::new(f);
                                     let mut rng = rand::thread_rng();
                                     let choice = reader.lines().choose(&mut rng);
                                     if let Some(Ok(topic)) = choice {

@@ -46,10 +46,19 @@ pub(crate) fn thank_slash(thanker: &User, thankee: &User) -> redis::RedisResult<
     if can_thank(thanker, thankee) && !on_cooldown {
         con.set_ex(format!("on-cooldown:{}", thanker.id.0), "", THANK_COOLDOWN)?;
         let new_rep = thank_user(thankee, &mut con)?;
-        Ok(format!(
-            "Thanked **{}** (new rep: **{}**)\n",
-            thankee.name, new_rep
-        ))
+
+        if new_rep == 1000 {
+            let fireworks_url = "https://tenor.com/view/happy-new-year2021version-gif-19777838";
+            Ok(format!(
+                "**{}** has helped **1000** people. What a legend! In recognition of this achievement, {} can redeem these points for a book of your choosing: contact PollardsRho for more information. *Offer not valid in select states. Conditions may apply.* \n{}",
+                thankee.name, thankee.name, fireworks_url
+            ))
+        } else {
+            Ok(format!(
+                "Thanked **{}** (new rep: **{}**)\n",
+                thankee.name, new_rep
+            ))
+        }
     } else if on_cooldown {
         Ok("You're still on cooldown: wait 30 seconds, please!".to_string())
     } else {
