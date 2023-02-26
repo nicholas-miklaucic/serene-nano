@@ -1,11 +1,14 @@
 mod acarole;
+mod command_responder;
 mod config;
+mod geolocation;
 mod poetry;
 mod rep;
 mod set;
 mod translate;
 mod weather;
 
+use command_responder::{CommandResponder, StringContent, WeatherEmbed};
 use lingua::{IsoCode639_1, Language};
 use panmath;
 use rand::Rng;
@@ -39,7 +42,7 @@ extern crate partial_application;
 
 use serenity::{
     self, async_trait,
-    client::bridge::gateway::{GatewayIntents, ShardId, ShardManager},
+    client::bridge::gateway::{ShardId, ShardManager},
     framework::standard::{
         buckets::{LimitedFor, RevertBucket},
         help_commands,
@@ -63,6 +66,8 @@ use serenity::{
     },
     prelude::*,
 };
+
+use crate::weather::{get_weather_forecast_from_name, UnitSystem};
 
 struct Handler;
 
@@ -260,7 +265,7 @@ impl EventHandler for Handler {
                             .description("Get the weather for a place")
                             .create_option(|opt| {
                                 opt.name("location")
-                                    .description("Location")
+                                    .description("Place name or US zip code")
                                     .kind(ApplicationCommandOptionType::String)
                                     .required(true)
                             })
@@ -270,7 +275,6 @@ impl EventHandler for Handler {
                                     .kind(ApplicationCommandOptionType::String)
                                     .add_string_choice("imperial", "imperial")
                                     .add_string_choice("metric", "metric")
-                                    .add_string_choice("scientific", "standard")
                             })
                     })
                     .create_application_command(|command| {
@@ -348,7 +352,7 @@ impl EventHandler for Handler {
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(command) = interaction {
-            let data = match command.data.name.as_str() {
+            let data_str = match command.data.name.as_str() {
                 "translate" => {
                     let mut options = HashMap::new();
                     for opt in &command.data.options {
@@ -383,6 +387,34 @@ impl EventHandler for Handler {
                 }
                 _ => "".to_string(),
             };
+
+            let data: Box<dyn CommandResponder> = match command.data.name.as_str() {
+                "weather" => {
+                    // parse arguments
+                    let mut units = UnitSystem::Metric;
+                    let mut location = "New York, NY";
+                    for opt in &command.data.options {
+                        match &opt.value {
+                            Some(serde_json::Value::String(s)) => {
+                                if opt.name.as_str() == "units" {
+                                    let n = opt.name.as_str();
+                                    units = match n {
+                                        "metric" => UnitSystem::Metric,
+                                        "imperial" => UnitSystem::Imperial,
+                                        _ => units,
+                                    }
+                                } else if opt.name.as_str() == "location" {
+                                    location = s.as_str();
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    dbg!(location, units);
+                    Box::new(WeatherEmbed::new(location, units).await)
+                }
+                _ => Box::new(StringContent::new(data_str)),
+            };
             if let Err(why) = command
                 .create_interaction_response(&ctx.http, |response| {
                     response
@@ -411,7 +443,7 @@ impl EventHandler for Handler {
                                                 user_name, rep
                                             ));
                                         }
-                                        msg.create_embed(|emb| {
+                                        msg.embed(|emb| {
                                             emb.title("Reputation Leaderboard")
                                                 .color(Color::PURPLE)
                                                 .field("Leaders", list, false)
@@ -506,25 +538,9 @@ impl EventHandler for Handler {
                                 }
                             },
                             "weather" => {
-                                // parse arguments
-                                let mut units = "metric";
-                                let mut location = "New York, NY";
-                                for opt in &command.data.options {
-                                    match &opt.value {
-                                        Some(serde_json::Value::String(s)) => {
-                                            if opt.name.as_str() == "units" {
-                                                units = s.as_str();
-                                            } else if opt.name.as_str() == "location" {
-                                                location = s.as_str();
-                                            }
-                                        },
-                                        _ => {}
-                                    }
-                                }
-                                dbg!(location, units);
-                                weather::weather_msg(location, units, msg)
+                                data.response(msg)
                             }
-                            "translate" => msg.content(data),
+                            "translate" => data.response(msg),
                             "texify" => {
                                 let message = command
                                     .data
@@ -729,7 +745,7 @@ async fn tex_source(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         Some(id) => ContentSafeOptions::default().display_as_member_from(id),
         None => ContentSafeOptions::default(),
     };
-    if let Err(why) = msg.reply(ctx, content_safe(ctx, texed, &opts).await).await {
+    if let Err(why) = msg.reply(ctx, content_safe(ctx, texed, &opts, &[])).await {
         println!("Error saying message: {:?}", why);
     }
 
@@ -765,7 +781,7 @@ async fn prettify(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         None => ContentSafeOptions::default(),
     };
     if let Err(why) = msg
-        .reply(ctx, content_safe(ctx, prettified, &opts).await)
+        .reply(ctx, content_safe(ctx, prettified, &opts, &[]))
         .await
     {
         println!("Error saying message: {:?}", why);
@@ -781,10 +797,7 @@ async fn say(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         Some(id) => ContentSafeOptions::default().display_as_member_from(id),
         None => ContentSafeOptions::default(),
     };
-    if let Err(why) = msg
-        .reply(ctx, content_safe(ctx, message, &opts).await)
-        .await
-    {
+    if let Err(why) = msg.reply(ctx, content_safe(ctx, message, &opts, &[])).await {
         println!("Error saying message: {:?}", why);
     }
 
@@ -835,7 +848,7 @@ async fn tl(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         Some(id) => ContentSafeOptions::default().display_as_member_from(id),
         None => ContentSafeOptions::default(),
     };
-    if let Err(why) = msg.reply(ctx, content_safe(ctx, reply, &opts).await).await {
+    if let Err(why) = msg.reply(ctx, content_safe(ctx, reply, &opts, &[])).await {
         println!("Error saying message: {:?}", why);
     }
 
@@ -889,7 +902,7 @@ async fn main() {
         .parse()
         .expect("application id is not a valid id");
 
-    let http = Http::new_with_token(&token);
+    let http = Http::new(&token);
 
     // We will fetch your bot's owners and id
     let (owners, bot_id) = match http.get_current_application_info().await {
@@ -927,7 +940,14 @@ async fn main() {
         .group(&GENERAL_GROUP)
         .help(&MY_HELP);
 
-    let mut client = Client::builder(&token)
+    let intents = GatewayIntents::GUILD_MESSAGES
+        | GatewayIntents::GUILD_MESSAGE_REACTIONS
+        | GatewayIntents::DIRECT_MESSAGES
+        | GatewayIntents::DIRECT_MESSAGE_REACTIONS
+        | GatewayIntents::MESSAGE_CONTENT
+        | GatewayIntents::GUILD_EMOJIS_AND_STICKERS;
+
+    let mut client = Client::builder(&token, intents)
         .event_handler(Handler)
         .application_id(application_id)
         .framework(framework)
