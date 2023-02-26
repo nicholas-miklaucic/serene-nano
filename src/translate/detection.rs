@@ -22,10 +22,15 @@ pub(crate) fn detect_language(msg: &str) -> Option<Language> {
     if msg.starts_with("---") {
         dbg!(msg.clone());
         dbg!(conf_vals.clone());
+        dbg!(msg.chars().filter(|c| c.is_numeric()).count());
+        dbg!(msg.chars().count());
+        dbg!(conf_vals.get(&Language::English).unwrap_or(&0.0));
+        dbg!(msg.len() >= 30);
     }
 
-    // emojis and math can trip it up: if detected, don't translate
-    if msg.chars().filter(|c| c.is_numeric()).count() >= 10 {
+    // emojis and math can trip it up: if heavily numeric
+    if (msg.chars().filter(|c| c.is_numeric()).count() as f64) / (msg.chars().count() as f64) >= 0.3
+    {
         None
     } else if conf_vals.get(&Language::English).unwrap_or(&0.0) <= &0.75 && msg.len() >= 30 {
         detector.detect_language_of(msg)
