@@ -1,5 +1,9 @@
 //! Command to get data from OpenMeteo.
-use std::{fmt::Display, time::Duration};
+use std::{
+    convert::TryInto,
+    fmt::Display,
+    time::{Duration, SystemTime},
+};
 
 use reqwest::RequestBuilder;
 use serde::{Deserialize, Serialize};
@@ -67,43 +71,42 @@ impl Display for TempUnit {
 /// The units that the results are in. (We just care about the ones that change.)
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub(crate) struct WeatherUnits {
-    pub apparent_temperature_max: TempUnit,
-    pub apparent_temperature_min: TempUnit,
+    pub apparent_temperature: TempUnit,
 }
 
-/// Daily weather data.
+/// Hourly weather data.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub(crate) struct DailyWeatherData {
-    /// The times of each forecast, in ISO string format.
-    pub time: Vec<String>,
+pub(crate) struct HourlyWeatherData {
+    /// The times of each forecast, in UNIX time.
+    pub time: Vec<u64>,
     /// The weather codes, in WMO format.
     pub weathercode: Vec<usize>,
-    /// The maximum apparent temperature.
-    pub apparent_temperature_max: Vec<f64>,
-    /// The minimum apparent temperature.
-    pub apparent_temperature_min: Vec<f64>,
+    /// The apparent temperature.
+    pub apparent_temperature: Vec<f64>,
     /// The maximum precipitation probability, as a percent.
-    pub precipitation_probability_max: Vec<f64>,
+    pub precipitation_probability: Vec<f64>,
 }
 
-impl DailyWeatherData {
+impl HourlyWeatherData {
     /// Gets the length of the data.
     pub fn len(&self) -> usize {
         self.time.len()
     }
 }
 
-/// Weather response data for a daily weather data request.
+/// Weather response data for a hourly weather data request.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub(crate) struct WeatherResponse {
     /// The latitude.
     pub latitude: f64,
     /// The longitude.
     pub longitude: f64,
+    /// The offset in seconds.
+    pub utc_offset_seconds: i64,
     /// The units used.
-    pub daily_units: WeatherUnits,
-    /// The daily weather data itself.
-    pub daily: DailyWeatherData,
+    pub hourly_units: WeatherUnits,
+    /// The hourly weather data itself.
+    pub hourly: HourlyWeatherData,
 }
 
 pub(crate) async fn get_weather_forecast_from_loc(
@@ -111,29 +114,27 @@ pub(crate) async fn get_weather_forecast_from_loc(
     units: &UnitSystem,
 ) -> Option<WeatherResponse> {
     let client = reqwest::Client::new();
-    let daily_info = vec![
+    let hourly_info = vec![
         "weathercode",
-        "apparent_temperature_max",
-        "apparent_temperature_min",
-        "precipitation_probability_max",
+        "apparent_temperature",
+        "precipitation_probability",
     ];
     // comma-separated lists don't work in reqwests using query()
-    let daily_info_str = format!("daily={}", daily_info.join(","));
-    let r: reqwest::Response = units
+    let hourly_info_str = format!("hourly={}", hourly_info.join(","));
+    let r = units
         .query_args(
             client
                 .get(format!(
                     "https://api.open-meteo.com/v1/forecast?{}",
-                    daily_info_str
+                    hourly_info_str
                 ))
                 .query(&[("latitude", loc.latitude), ("longitude", loc.longitude)])
-                .query(&[("timezone", &loc.timezone)]),
+                .query(&[("timeformat", "unixtime"), ("timezone", "auto")]),
         )
         .send()
-        .await
-        .ok()?;
+        .await;
 
-    let locs: Option<WeatherResponse> = dbg!(r).json().await.ok();
+    let locs: Option<WeatherResponse> = dbg!(r.ok()?.json().await).ok();
     locs
 }
 
@@ -172,44 +173,58 @@ pub(crate) async fn weather_forecast_msg<'a, 'b>(
     command: &ApplicationCommandInteraction,
     ctx: &Context,
 ) {
-    let temp_code = forecast.daily_units.apparent_temperature_max;
-    let daily = &forecast.daily;
+    let temp_code = forecast.hourly_units.apparent_temperature;
+    let hourly = &forecast.hourly;
 
     let menu = MenuBuilder::new_paginator().timeout(Duration::from_secs(120));
     let mut pages = vec![];
+    const NUM_PAGES: usize = 10;
 
-    for i in 0..daily.len() {
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    for i in 0..hourly.len() {
+        if (hourly.time[i] as i64 + forecast.utc_offset_seconds)
+            .try_into()
+            .unwrap_or(0)
+            < now
+        {
+            // this is for the past, don't include
+            continue;
+        }
+        let page_num = pages.len();
         let mut msg_page = CreateMessage::default();
         msg_page.embed(|e| {
-            e.image(get_weather_icon_url(daily.weathercode[0]))
+            e.image(get_weather_icon_url(hourly.weathercode[0]))
                 .title(format!(
                     "Forecast for {}, {}, {}",
                     loc.name, loc.admin1, loc.country_code
                 ))
-                .description(format!("{}", daily.time[i]))
+                .description(format!("T+{}", page_num))
                 .url(format!(
                     "https://merrysky.net/forecast/{},{}",
                     loc.latitude, loc.longitude
                 ))
                 .color((229, 100, 255))
                 .field(
-                    "Low",
-                    format!("{} {}", daily.apparent_temperature_min[i], temp_code),
-                    true,
-                )
-                .field(
-                    "High",
-                    format!("{} {}", daily.apparent_temperature_max[i], temp_code),
-                    true,
+                    "Felt Temperature",
+                    format!("{} {}", hourly.apparent_temperature[i], temp_code),
+                    false,
                 )
                 .field(
                     "Precipitation Chance",
-                    format!("{}%", daily.precipitation_probability_max[i]),
-                    true,
+                    format!("{}%", hourly.precipitation_probability[i]),
+                    false,
                 )
                 .footer(|f| f.text("Courtesy of OpenMeteo"))
         });
         pages.push(Page::new_static(msg_page));
+        if pages.len() >= NUM_PAGES {
+            // added enough hours
+            break;
+        }
     }
     match menu
         .add_pages(pages)
