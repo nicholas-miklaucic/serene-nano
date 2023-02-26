@@ -19,6 +19,7 @@ serde_json = { version = "1.0" }
 rand = "0.8.4"
 uuid = { version = "0.8", features = ["v4"] }
 serenity-additions = "0.3.4"
+deepl-openapi = "2.7.1"
 
 [dependencies.serenity]
 default-features = false
@@ -41,7 +42,7 @@ version = "0.11.5"
 path = "../panmath"
 
 [dependencies.lingua]
-version = "1.3.2"
+version = "1.4.0"
 default-features = false
 features = [
     "bulgarian",
@@ -56,6 +57,7 @@ features = [
     "french",
     "hindi",
     "hungarian",
+    "indonesian",
     "italian",
     "japanese",
     "lithuanian",
@@ -68,5 +70,6 @@ features = [
     "slovak",
     "slovene",
     "swedish",
+    "ukrainian",
     "chinese",
 ]

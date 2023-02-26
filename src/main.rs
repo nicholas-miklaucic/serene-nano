@@ -325,7 +325,10 @@ impl EventHandler for Handler {
                         )
                         .await;
                 }
-            } else if !&_new_message.content.starts_with("nano,") {
+            } else if !&_new_message
+                .content
+                .starts_with(&env::var("PREFIX").unwrap_or("nano, ".to_string()))
+            {
                 match detect_language(&_new_message.content) {
                     // only translate for non-English text detected with high probability
                     Some(Language::English) => (),
@@ -338,7 +341,7 @@ impl EventHandler for Handler {
                         )
                         .await
                         {
-                            Ok(result) => {
+                            Some(result) => {
                                 if result == _new_message.content {
                                     println!("Translation detection failed");
                                     dbg!(result.clone());
@@ -346,7 +349,7 @@ impl EventHandler for Handler {
                                     println!("Error sending message: {}", why);
                                 }
                             }
-                            Err(e) => println!("Error translating: {}", e),
+                            None => println!("Error translating"),
                         }
                     }
                 }
@@ -380,11 +383,11 @@ impl EventHandler for Handler {
                         )
                         .await
                         {
-                            Ok(result) => {
+                            Some(result) => {
                                 format!("{}", result)
                             }
-                            Err(e) => {
-                                format!("Error translating: {}", e)
+                            None => {
+                                format!("Error translating :(")
                             }
                         }
                     }
@@ -849,14 +852,8 @@ async fn tl(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     }
 
     let reply = match translate::translate(text, source_lang.clone(), target_lang.clone()).await {
-        Ok(result) => format!(
-            "{:?} → {:?}\nSource: {}\nTranslation: {}",
-            source_lang.unwrap_or(Language::English),
-            target_lang,
-            text,
-            result
-        ),
-        Err(e) => format!("Error while translating: {:?}", e),
+        Some(result) => format!("{}", result),
+        None => format!("Error while translating"),
     };
 
     let opts = match msg.guild_id {
