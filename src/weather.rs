@@ -39,7 +39,7 @@ impl UnitSystem {
 
 /// Temperature units.
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
-enum TempUnit {
+pub(crate) enum TempUnit {
     /// Celsius
     #[serde(rename = "°C")]
     Celsius,
@@ -64,14 +64,14 @@ impl Display for TempUnit {
 
 /// The units that the results are in. (We just care about the ones that change.)
 #[derive(Debug, Clone, Deserialize, Serialize)]
-struct WeatherUnits {
+pub(crate) struct WeatherUnits {
     pub apparent_temperature_max: TempUnit,
     pub apparent_temperature_min: TempUnit,
 }
 
 /// Daily weather data.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-struct DailyWeatherData {
+pub(crate) struct DailyWeatherData {
     /// The times of each forecast, in ISO string format.
     pub time: Vec<String>,
     /// The weather codes, in WMO format.
@@ -141,7 +141,7 @@ fn get_weather_icon_url(wmo_code: usize) -> String {
         71 | 73 | 75 | 77 => "snow",                 // Snow and "snow grains"
         85 | 86 => "chancesnow",                     // Snow showers
         95 | 96 | 99 => "tstorms",                   // Thunderstorms
-        _ => "unknown",                              // Unknown
+        _ => "unknown",                              // Unknown, including "fog"
     };
 
     format!("https://cdn.jsdelivr.net/gh/manifestinteractive/weather-underground-icons/dist/icons/white/png/128x128/{}.png", icon_name)
@@ -158,14 +158,22 @@ pub(crate) async fn get_weather_forecast_from_name(
 
 /// Reports the weather forecast at the given name in the given units.
 pub(crate) fn weather_forecast_msg<'a, 'b>(
-    loc: Location,
-    forecast: WeatherResponse,
+    loc: &Location,
+    forecast: &WeatherResponse,
     msg: &'a mut CreateInteractionResponseData<'b>,
 ) -> &'a mut CreateInteractionResponseData<'b> {
     let temp_code = forecast.daily_units.apparent_temperature_max;
-    let daily = forecast.daily;
+    let daily = &forecast.daily;
     msg.embed(|e| {
         e.image(get_weather_icon_url(daily.weathercode[0]))
+            .title(format!(
+                "Forecast for {}, {}, {}",
+                loc.name, loc.admin1, loc.country_code
+            ))
+            .url(format!(
+                "https://merrysky.net/forecast/{},{}",
+                loc.latitude, loc.longitude
+            ))
             .color((229, 100, 255))
             .field(
                 "Low",
@@ -182,6 +190,7 @@ pub(crate) fn weather_forecast_msg<'a, 'b>(
                 format!("{}%", daily.precipitation_probability_max[0]),
                 true,
             )
+            .footer(|f| f.text("Courtesy of OpenMeteo"))
     })
 }
 

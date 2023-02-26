@@ -43,10 +43,10 @@ fn rem_elements(
     con.srem(key, elements)
 }
 
-pub(crate) fn add_elements_command<'a>(
+pub(crate) fn add_elements_command<'a, 'b>(
     command: &ApplicationCommandInteraction,
-    msg: &'a mut CreateInteractionResponseData,
-) -> (&'a mut CreateInteractionResponseData, RedisResult<()>) {
+    msg: &'a mut CreateInteractionResponseData<'b>,
+) -> (&'a mut CreateInteractionResponseData<'b>, RedisResult<()>) {
     let client_res = redis::Client::open(REDIS_URL);
     let mut client;
     match client_res {
@@ -91,10 +91,10 @@ pub(crate) fn add_elements_command<'a>(
     }
 }
 
-pub(crate) fn rem_elements_command<'a>(
+pub(crate) fn rem_elements_command<'a, 'b>(
     command: &ApplicationCommandInteraction,
-    msg: &'a mut CreateInteractionResponseData,
-) -> (&'a mut CreateInteractionResponseData, RedisResult<()>) {
+    msg: &'a mut CreateInteractionResponseData<'b>,
+) -> (&'a mut CreateInteractionResponseData<'b>, RedisResult<()>) {
     let client_res = redis::Client::open(REDIS_URL);
     let mut client;
     match client_res {
@@ -139,10 +139,10 @@ pub(crate) fn rem_elements_command<'a>(
     }
 }
 
-pub(crate) fn get_list_command<'a>(
+pub(crate) fn get_list_command<'a, 'b>(
     command: &ApplicationCommandInteraction,
-    msg: &'a mut CreateInteractionResponseData,
-) -> (&'a mut CreateInteractionResponseData, RedisResult<()>) {
+    msg: &'a mut CreateInteractionResponseData<'b>,
+) -> (&'a mut CreateInteractionResponseData<'b>, RedisResult<()>) {
     let client_res = redis::Client::open(REDIS_URL);
     let mut client;
     match client_res {

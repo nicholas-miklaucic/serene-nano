@@ -61,7 +61,7 @@ impl CommandResponder for WeatherEmbed {
         &self,
         msg: &'a mut CreateInteractionResponseData<'b>,
     ) -> &'a mut CreateInteractionResponseData<'b> {
-        match self.location.zip(self.forecast) {
+        match self.location.as_ref().zip(self.forecast.as_ref()) {
             Some((l, f)) => weather_forecast_msg(l, f, msg),
             None => msg.content("Weather could not be found :("),
         }

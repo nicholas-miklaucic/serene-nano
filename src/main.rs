@@ -265,7 +265,7 @@ impl EventHandler for Handler {
                             .description("Get the weather for a place")
                             .create_option(|opt| {
                                 opt.name("location")
-                                    .description("Place name or US zip code")
+                                    .description("Place name or postal code")
                                     .kind(ApplicationCommandOptionType::String)
                                     .required(true)
                             })
@@ -424,13 +424,14 @@ impl EventHandler for Handler {
                         .interaction_response_data(|msg| match command.data.name.as_str() {
                             "ping" => msg.content("Pong!"),
                             "leaderboard" => {
+                                let default10 = ApplicationCommandInteractionDataOptionValue::Integer(10);
                                 let n = command
                                     .data
                                     .options
                                     .get(0)
                                     .and_then(|x| x.resolved.as_ref())
                                     .unwrap_or(
-                                        &ApplicationCommandInteractionDataOptionValue::Integer(10),
+                                        &default10
                                     );
 
                                 if let &ApplicationCommandInteractionDataOptionValue::Integer(n) = n
