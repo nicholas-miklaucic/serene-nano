@@ -1,12 +1,14 @@
 //! Command to get data from OpenMeteo.
-use std::fmt::Display;
+use std::{fmt::Display, time::Duration};
 
 use reqwest::RequestBuilder;
 use serde::{Deserialize, Serialize};
 use serenity::{
-    builder::{CreateEmbed, CreateInteractionResponseData},
+    builder::{CreateEmbed, CreateInteractionResponseData, CreateMessage},
     client::Context,
+    model::interactions::application_command::ApplicationCommandInteraction,
 };
+use serenity_additions::menu::{MenuBuilder, Page};
 
 use crate::geolocation::{find_location, Location};
 
@@ -84,6 +86,13 @@ pub(crate) struct DailyWeatherData {
     pub precipitation_probability_max: Vec<f64>,
 }
 
+impl DailyWeatherData {
+    /// Gets the length of the data.
+    pub fn len(&self) -> usize {
+        self.time.len()
+    }
+}
+
 /// Weather response data for a daily weather data request.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub(crate) struct WeatherResponse {
@@ -157,41 +166,60 @@ pub(crate) async fn get_weather_forecast_from_name(
 }
 
 /// Reports the weather forecast at the given name in the given units.
-pub(crate) fn weather_forecast_msg<'a, 'b>(
+pub(crate) async fn weather_forecast_msg<'a, 'b>(
     loc: &Location,
     forecast: &WeatherResponse,
-    msg: &'a mut CreateInteractionResponseData<'b>,
-) -> &'a mut CreateInteractionResponseData<'b> {
+    command: &ApplicationCommandInteraction,
+    ctx: &Context,
+) {
     let temp_code = forecast.daily_units.apparent_temperature_max;
     let daily = &forecast.daily;
-    msg.embed(|e| {
-        e.image(get_weather_icon_url(daily.weathercode[0]))
-            .title(format!(
-                "Forecast for {}, {}, {}",
-                loc.name, loc.admin1, loc.country_code
-            ))
-            .url(format!(
-                "https://merrysky.net/forecast/{},{}",
-                loc.latitude, loc.longitude
-            ))
-            .color((229, 100, 255))
-            .field(
-                "Low",
-                format!("{} {}", daily.apparent_temperature_min[0], temp_code),
-                true,
-            )
-            .field(
-                "High",
-                format!("{} {}", daily.apparent_temperature_max[0], temp_code),
-                true,
-            )
-            .field(
-                "Precipitation Chance",
-                format!("{}%", daily.precipitation_probability_max[0]),
-                true,
-            )
-            .footer(|f| f.text("Courtesy of OpenMeteo"))
-    })
+
+    let menu = MenuBuilder::new_paginator().timeout(Duration::from_secs(120));
+    let mut pages = vec![];
+
+    for i in 0..daily.len() {
+        let mut msg_page = CreateMessage::default();
+        msg_page.embed(|e| {
+            e.image(get_weather_icon_url(daily.weathercode[0]))
+                .title(format!(
+                    "Forecast for {}, {}, {}",
+                    loc.name, loc.admin1, loc.country_code
+                ))
+                .description(format!("{}", daily.time[i]))
+                .url(format!(
+                    "https://merrysky.net/forecast/{},{}",
+                    loc.latitude, loc.longitude
+                ))
+                .color((229, 100, 255))
+                .field(
+                    "Low",
+                    format!("{} {}", daily.apparent_temperature_min[i], temp_code),
+                    true,
+                )
+                .field(
+                    "High",
+                    format!("{} {}", daily.apparent_temperature_max[i], temp_code),
+                    true,
+                )
+                .field(
+                    "Precipitation Chance",
+                    format!("{}%", daily.precipitation_probability_max[i]),
+                    true,
+                )
+                .footer(|f| f.text("Courtesy of OpenMeteo"))
+        });
+        pages.push(Page::new_static(msg_page));
+    }
+    match menu
+        .add_pages(pages)
+        .show_help()
+        .build(ctx, command.channel_id)
+        .await
+    {
+        Ok(_) => {}
+        Err(_) => {}
+    }
 }
 
 #[cfg(test)]

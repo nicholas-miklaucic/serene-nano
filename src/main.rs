@@ -8,7 +8,8 @@ mod set;
 mod translate;
 mod weather;
 
-use command_responder::{CommandResponder, StringContent, WeatherEmbed};
+use command_responder::{CommandResponder, StringContent};
+use geolocation::find_location;
 use lingua::{IsoCode639_1, Language};
 use panmath;
 use rand::Rng;
@@ -25,6 +26,7 @@ use serenity::{
     utils::{content_safe, Color, ContentSafeOptions, MessageBuilder},
     Result,
 };
+use serenity_additions::RegisterAdditions;
 use std::{
     collections::{HashMap, HashSet},
     string::ParseError,
@@ -67,7 +69,9 @@ use serenity::{
     prelude::*,
 };
 
-use crate::weather::{get_weather_forecast_from_name, UnitSystem};
+use crate::weather::{
+    get_weather_forecast_from_loc, get_weather_forecast_from_name, weather_forecast_msg, UnitSystem,
+};
 
 struct Handler;
 
@@ -392,7 +396,7 @@ impl EventHandler for Handler {
                 "weather" => {
                     // parse arguments
                     let mut units = UnitSystem::Metric;
-                    let mut location = "New York, NY";
+                    let mut loc_name = "New York, NY";
                     for opt in &command.data.options {
                         match &opt.value {
                             Some(serde_json::Value::String(s)) => {
@@ -404,14 +408,24 @@ impl EventHandler for Handler {
                                         _ => units,
                                     }
                                 } else if opt.name.as_str() == "location" {
-                                    location = s.as_str();
+                                    loc_name = s.as_str();
                                 }
                             }
                             _ => {}
                         }
                     }
-                    dbg!(location, units);
-                    Box::new(WeatherEmbed::new(location, units).await)
+                    let loc = find_location(loc_name).await;
+                    match &loc {
+                        Some(l) => {
+                            let forecast = get_weather_forecast_from_loc(&l, &units).await;
+                            if let Some(f) = forecast {
+                                weather_forecast_msg(&l, &f, &command, &ctx).await;
+                            }
+                        }
+                        None => {}
+                    };
+                    // Box::new(WeatherEmbed::new(location, units).await)
+                    Box::new(StringContent::new(""))
                 }
                 _ => Box::new(StringContent::new(data_str)),
             };
@@ -539,9 +553,9 @@ impl EventHandler for Handler {
                                 }
                             },
                             "weather" => {
-                                data.response(msg)
+                                msg.ephemeral(true).content("Loading...")
                             }
-                            "translate" => data.response(msg),
+                            "translate" => data.response(&command, &ctx, msg),
                             "texify" => {
                                 let message = command
                                     .data
@@ -926,7 +940,7 @@ async fn main() {
         .configure(|c| {
             c.with_whitespace(true)
                 .on_mention(Some(bot_id))
-                .prefix("nano, ")
+                .prefix(env::var("PREFIX").unwrap_or("nano, ".to_string()))
                 // In this case, if "," would be first, a message would never
                 // be delimited at ", ", forcing you to trim your arguments if you
                 // want to avoid whitespaces at the start of each.
@@ -952,6 +966,7 @@ async fn main() {
         .event_handler(Handler)
         .application_id(application_id)
         .framework(framework)
+        .register_serenity_additions()
         .await
         .expect("Error creating client!");
     // For this example to run properly, the "Presence Intent" and "Server Members Intent"
