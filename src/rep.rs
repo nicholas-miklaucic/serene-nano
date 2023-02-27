@@ -3,7 +3,7 @@
 extern crate redis;
 use crate::config::{REDIS_URL, THANK_COOLDOWN};
 use redis::Commands;
-use serenity::builder::CreateInteractionResponseData;
+
 use serenity::model::channel::Message;
 use serenity::model::user::User;
 use serenity::prelude::*;

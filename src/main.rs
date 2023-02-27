@@ -13,7 +13,7 @@ mod weather;
 use crate::utils::log_err;
 use command_responder::{CommandResponder, StringContent};
 use geolocation::find_location;
-use lingua::{IsoCode639_1, Language};
+use lingua::{Language};
 use panmath;
 use rand::Rng;
 use rand::{self, prelude::IteratorRandom};
@@ -23,22 +23,18 @@ use serenity::model::interactions::{Interaction, InteractionResponseType};
 use serenity::model::prelude::command::CommandOptionType;
 use serenity::model::prelude::interaction::application_command::CommandDataOptionValue;
 use serenity::{
-    builder::{CreateInteractionResponse, CreateInteractionResponseData, CreateMessage},
-    cache::Cache,
+    builder::{CreateMessage},
     framework::standard::Delimiter,
-    model::{interactions::application_command::ApplicationCommandInteraction, prelude::Activity},
+    model::{prelude::Activity},
     utils::{content_safe, Color, ContentSafeOptions, MessageBuilder},
-    Result,
 };
 use serenity_additions::RegisterAdditions;
 use std::{
     collections::{HashMap, HashSet},
-    string::ParseError,
 };
 use std::{env, fs::File};
 use std::{
     io::{BufRead, BufReader},
-    str::FromStr,
 };
 use translate::detection::detect_language;
 use wikipedia;
@@ -48,26 +44,23 @@ extern crate partial_application;
 
 use serenity::{
     self, async_trait,
-    client::bridge::gateway::{ShardId, ShardManager},
     framework::standard::{
-        buckets::{LimitedFor, RevertBucket},
         help_commands,
-        macros::{check, command, group, help, hook},
-        Args, CommandGroup, CommandOptions, CommandResult, DispatchError, HelpOptions, Reason,
+        macros::{command, group, help},
+        Args, CommandGroup, CommandResult, HelpOptions,
         StandardFramework,
     },
-    http::{self, Http},
+    http::{Http},
     model::{
-        channel::{Channel, Message},
+        channel::{Message},
         gateway::Ready,
-        id::{GuildId, UserId},
-        permissions::Permissions,
+        id::{UserId},
     },
     prelude::*,
 };
 
 use crate::weather::{
-    get_weather_forecast_from_loc, get_weather_forecast_from_name, weather_forecast_msg, UnitSystem,
+    get_weather_forecast_from_loc, weather_forecast_msg, UnitSystem,
 };
 
 struct Handler;
@@ -886,7 +879,7 @@ async fn tl(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
 /// Gives very real, totally-not-random responses to any yes-or-no question your heart desires.
 #[command]
-async fn ask(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+async fn ask(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
     let random_i = rand::thread_rng().gen_range(0..20);
     const CHOICES: [&'static str; 20] = [
         "It is certain.",

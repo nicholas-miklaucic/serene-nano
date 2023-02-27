@@ -9,7 +9,7 @@ use serenity::{
         application::interaction::application_command::{
             ApplicationCommandInteraction, CommandDataOptionValue,
         },
-        prelude::{interaction::application_command::CommandDataOption, User},
+        prelude::{User},
     },
 };
 
@@ -48,7 +48,7 @@ pub(crate) fn add_elements_command<'a, 'b>(
     msg: &'a mut CreateInteractionResponseData<'b>,
 ) -> (&'a mut CreateInteractionResponseData<'b>, RedisResult<()>) {
     let client_res = redis::Client::open(REDIS_URL);
-    let mut client;
+    let client;
     match client_res {
         Ok(client_val) => {
             client = client_val;
@@ -56,7 +56,7 @@ pub(crate) fn add_elements_command<'a, 'b>(
         Err(e) => return (msg, Err(e)),
     }
     let mut con;
-    let mut con_res = client.get_connection();
+    let con_res = client.get_connection();
     match con_res {
         Ok(con_val) => {
             con = con_val;
@@ -96,7 +96,7 @@ pub(crate) fn rem_elements_command<'a, 'b>(
     msg: &'a mut CreateInteractionResponseData<'b>,
 ) -> (&'a mut CreateInteractionResponseData<'b>, RedisResult<()>) {
     let client_res = redis::Client::open(REDIS_URL);
-    let mut client;
+    let client;
     match client_res {
         Ok(client_val) => {
             client = client_val;
@@ -104,7 +104,7 @@ pub(crate) fn rem_elements_command<'a, 'b>(
         Err(e) => return (msg, Err(e)),
     }
     let mut con;
-    let mut con_res = client.get_connection();
+    let con_res = client.get_connection();
     match con_res {
         Ok(con_val) => {
             con = con_val;
@@ -144,7 +144,7 @@ pub(crate) fn get_list_command<'a, 'b>(
     msg: &'a mut CreateInteractionResponseData<'b>,
 ) -> (&'a mut CreateInteractionResponseData<'b>, RedisResult<()>) {
     let client_res = redis::Client::open(REDIS_URL);
-    let mut client;
+    let client;
     match client_res {
         Ok(client_val) => {
             client = client_val;
@@ -152,7 +152,7 @@ pub(crate) fn get_list_command<'a, 'b>(
         Err(e) => return (msg, Err(e)),
     }
     let mut con;
-    let mut con_res = client.get_connection();
+    let con_res = client.get_connection();
     match con_res {
         Ok(con_val) => {
             con = con_val;

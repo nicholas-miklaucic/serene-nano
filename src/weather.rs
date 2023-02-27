@@ -8,7 +8,7 @@ use std::{
 use reqwest::RequestBuilder;
 use serde::{Deserialize, Serialize};
 use serenity::{
-    builder::{CreateEmbed, CreateInteractionResponseData, CreateMessage},
+    builder::{CreateMessage},
     client::Context,
     model::interactions::application_command::ApplicationCommandInteraction,
 };

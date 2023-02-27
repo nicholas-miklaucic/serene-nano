@@ -1,14 +1,11 @@
 //! Trait that responds to commands.
 
 use serenity::{
-    builder::CreateInteractionResponseData, client::Context, model::application::command::Command,
+    builder::CreateInteractionResponseData, client::Context,
     model::application::interaction::application_command::ApplicationCommandInteraction,
 };
 
-use crate::{
-    geolocation::{find_location, Location},
-    weather::{get_weather_forecast_from_loc, weather_forecast_msg, UnitSystem, WeatherResponse},
-};
+
 
 pub(crate) trait CommandResponder: Sync + Send {
     /// Responds to a command.
@@ -37,8 +34,8 @@ impl StringContent {
 impl CommandResponder for StringContent {
     fn response<'a, 'b>(
         &self,
-        command: &ApplicationCommandInteraction,
-        ctx: &Context,
+        _command: &ApplicationCommandInteraction,
+        _ctx: &Context,
         msg: &'a mut CreateInteractionResponseData<'b>,
     ) -> &'a mut CreateInteractionResponseData<'b> {
         msg.content(&self.content)

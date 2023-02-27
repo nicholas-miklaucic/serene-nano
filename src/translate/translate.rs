@@ -5,13 +5,12 @@ use deepl_openapi::{
         configuration::{ApiKey, Configuration},
         translate_text_api::translate_text,
     },
-    models::TranslateText200ResponseTranslationsInner,
 };
 use lingua::Language;
 use reqwest;
-use serde::{de::IntoDeserializer, Deserialize, Serialize};
-use std::{collections::HashMap, env};
-use uuid::Uuid;
+
+use std::{env};
+
 
 use crate::translate::available_langs::{lingua_to_deepl_source, lingua_to_deepl_target};
 
