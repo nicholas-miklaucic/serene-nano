@@ -1821,7 +1821,9 @@ dependencies = [
 
 [[package]]
 name = "panmath"
-version = "0.1.0"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "abbea5872c0d622204c35c0282c8906aea568a9e6279b71402280d1290a7ee17"
 dependencies = [
  "lazy_static",
  "nom",

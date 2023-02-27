@@ -5,6 +5,7 @@ mod geolocation;
 mod poetry;
 mod rep;
 mod set;
+mod trace_moe;
 mod translate;
 mod weather;
 
@@ -15,6 +16,7 @@ use panmath;
 use rand::Rng;
 use rand::{self, prelude::IteratorRandom};
 use regex::Regex;
+use serenity::model::interactions::application_command::ResolvedTarget;
 use serenity::{
     builder::{CreateInteractionResponse, CreateInteractionResponseData, CreateMessage},
     cache::Cache,
@@ -85,6 +87,11 @@ impl EventHandler for Handler {
         let _commands =
             ApplicationCommand::set_global_application_commands(&ctx.http, |commands| {
                 commands
+                    .create_application_command(|command| {
+                        command
+                            .name("Source Anime GIFs")
+                            .kind(serenity::model::prelude::command::CommandType::Message)
+                    })
                     .create_application_command(|command| {
                         command.name("ping").description("A ping command")
                     })
@@ -440,6 +447,17 @@ impl EventHandler for Handler {
                         })
                         .interaction_response_data(|msg| match command.data.name.as_str() {
                             "ping" => msg.content("Pong!"),
+                            "Source Anime GIFs" => {
+                                match command.data.target() {
+                                    Some(target) => {
+                                        match target {
+                                            ResolvedTarget::Message(target_msg) => trace_moe::trace_response(&target_msg, msg),
+                                            _ => msg.content("Cannot use with user")
+                                        }
+                                    }
+                                    None => msg.content("Must select a message with image!")
+                                }
+                            },
                             "leaderboard" => {
                                 let default10 = ApplicationCommandInteractionDataOptionValue::Integer(10);
                                 let n = command
