@@ -6,10 +6,10 @@ use redis::{Commands, Connection, RedisResult};
 use serenity::{
     builder::CreateInteractionResponseData,
     model::{
-        interactions::application_command::{
-            ApplicationCommandInteraction, ApplicationCommandInteractionDataOptionValue,
+        application::interaction::application_command::{
+            ApplicationCommandInteraction, CommandDataOptionValue,
         },
-        prelude::User,
+        prelude::{interaction::application_command::CommandDataOption, User},
     },
 };
 
@@ -173,9 +173,7 @@ pub(crate) fn get_list_command<'a, 'b>(
                 elements.push(el.to_string())
             };
         } else if &opt.name == "user" {
-            if let Some(ApplicationCommandInteractionDataOptionValue::User(user_arg, _)) =
-                &opt.resolved
-            {
+            if let Some(CommandDataOptionValue::User(user_arg, _)) = &opt.resolved {
                 user = &user_arg;
             }
         }

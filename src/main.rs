@@ -7,8 +7,10 @@ mod rep;
 mod set;
 mod trace_moe;
 mod translate;
+mod utils;
 mod weather;
 
+use crate::utils::log_err;
 use command_responder::{CommandResponder, StringContent};
 use geolocation::find_location;
 use lingua::{IsoCode639_1, Language};
@@ -16,15 +18,15 @@ use panmath;
 use rand::Rng;
 use rand::{self, prelude::IteratorRandom};
 use regex::Regex;
-use serenity::model::interactions::application_command::ResolvedTarget;
+use serenity::model::interactions::application_command::{ApplicationCommand, ResolvedTarget};
+use serenity::model::interactions::{Interaction, InteractionResponseType};
+use serenity::model::prelude::command::CommandOptionType;
+use serenity::model::prelude::interaction::application_command::CommandDataOptionValue;
 use serenity::{
     builder::{CreateInteractionResponse, CreateInteractionResponseData, CreateMessage},
     cache::Cache,
     framework::standard::Delimiter,
-    model::{
-        interactions::application_command::ApplicationCommandInteractionDataOption,
-        prelude::Activity,
-    },
+    model::{interactions::application_command::ApplicationCommandInteraction, prelude::Activity},
     utils::{content_safe, Color, ContentSafeOptions, MessageBuilder},
     Result,
 };
@@ -59,13 +61,6 @@ use serenity::{
         channel::{Channel, Message},
         gateway::Ready,
         id::{GuildId, UserId},
-        interactions::{
-            application_command::{
-                ApplicationCommand, ApplicationCommandInteractionDataOptionValue,
-                ApplicationCommandOptionType,
-            },
-            Interaction, InteractionResponseType,
-        },
         permissions::Permissions,
     },
     prelude::*,
@@ -103,7 +98,7 @@ impl EventHandler for Handler {
                                 option
                                     .name("how_many_users")
                                     .description("The number of leaders to show (default 10)")
-                                    .kind(ApplicationCommandOptionType::Integer)
+                                    .kind(CommandOptionType::Integer)
                                     .required(false)
                             })
                     })
@@ -115,7 +110,7 @@ impl EventHandler for Handler {
                                 option
                                     .name("message")
                                     .description("What to say")
-                                    .kind(ApplicationCommandOptionType::String)
+                                    .kind(CommandOptionType::String)
                                     .required(true)
                             })
                     })
@@ -127,7 +122,7 @@ impl EventHandler for Handler {
                                 option
                                     .name("list_name")
                                     .description("The name of the list to add to")
-                                    .kind(ApplicationCommandOptionType::String)
+                                    .kind(CommandOptionType::String)
                                     .required(true)
                             });
 
@@ -136,7 +131,7 @@ impl EventHandler for Handler {
                                 option
                                     .name(format!("element_{}", i))
                                     .description("Value to add")
-                                    .kind(ApplicationCommandOptionType::String)
+                                    .kind(CommandOptionType::String)
                                     .required(false)
                             });
                         }
@@ -151,7 +146,7 @@ impl EventHandler for Handler {
                                 option
                                     .name("list_name")
                                     .description("The name of the list to add to")
-                                    .kind(ApplicationCommandOptionType::String)
+                                    .kind(CommandOptionType::String)
                                     .required(true)
                             });
 
@@ -160,7 +155,7 @@ impl EventHandler for Handler {
                                 option
                                     .name(format!("element_{}", i))
                                     .description("Value to remove")
-                                    .kind(ApplicationCommandOptionType::String)
+                                    .kind(CommandOptionType::String)
                                     .required(false)
                             });
                         }
@@ -175,14 +170,14 @@ impl EventHandler for Handler {
                                 option
                                     .name("list_name")
                                     .description("The name of the list to add to")
-                                    .kind(ApplicationCommandOptionType::String)
+                                    .kind(CommandOptionType::String)
                                     .required(true)
                             })
                             .create_option(|option| {
                                 option
                                     .name("user")
                                     .description("The user to get the list from (default: you)")
-                                    .kind(ApplicationCommandOptionType::User)
+                                    .kind(CommandOptionType::User)
                                     .required(false)
                             })
                     })
@@ -194,7 +189,7 @@ impl EventHandler for Handler {
                                 option
                                     .name("user")
                                     .description("The user to get rep for (defaults to you)")
-                                    .kind(ApplicationCommandOptionType::User)
+                                    .kind(CommandOptionType::User)
                                     .required(false)
                             })
                     })
@@ -206,7 +201,7 @@ impl EventHandler for Handler {
                                 option
                                     .name("user")
                                     .description("The user to thank")
-                                    .kind(ApplicationCommandOptionType::User)
+                                    .kind(CommandOptionType::User)
                                     .required(true)
                             })
                     })
@@ -218,14 +213,14 @@ impl EventHandler for Handler {
                                 option
                                     .name("text")
                                     .description("The text to translate")
-                                    .kind(ApplicationCommandOptionType::String)
+                                    .kind(CommandOptionType::String)
                                     .required(true)
                             })
                             .create_option(|option| {
                                 let source = option
                                     .name("source")
                                     .description("The source language (auto-detects if not given)")
-                                    .kind(ApplicationCommandOptionType::String)
+                                    .kind(CommandOptionType::String)
                                     .required(false);
                                 for lang_name in translate::available_langs::available_lang_names()
                                 {
@@ -237,7 +232,7 @@ impl EventHandler for Handler {
                                 let mut target = option
                                     .name("target")
                                     .description("The target language (defaults to English)")
-                                    .kind(ApplicationCommandOptionType::String)
+                                    .kind(CommandOptionType::String)
                                     .required(false);
                                 for lang_name in translate::available_langs::available_lang_names()
                                 {
@@ -254,7 +249,7 @@ impl EventHandler for Handler {
                                 option
                                     .name("message")
                                     .description("Input to translate")
-                                    .kind(ApplicationCommandOptionType::String)
+                                    .kind(CommandOptionType::String)
                                     .required(true)
                             })
                     })
@@ -266,7 +261,7 @@ impl EventHandler for Handler {
                                 option
                                     .name("message")
                                     .description("Input to translate")
-                                    .kind(ApplicationCommandOptionType::String)
+                                    .kind(CommandOptionType::String)
                                     .required(true)
                             })
                     })
@@ -277,13 +272,13 @@ impl EventHandler for Handler {
                             .create_option(|opt| {
                                 opt.name("location")
                                     .description("Place name or postal code")
-                                    .kind(ApplicationCommandOptionType::String)
+                                    .kind(CommandOptionType::String)
                                     .required(true)
                             })
                             .create_option(|opt| {
                                 opt.name("units")
                                     .description("Measurement units to use")
-                                    .kind(ApplicationCommandOptionType::String)
+                                    .kind(CommandOptionType::String)
                                     .add_string_choice("imperial", "imperial")
                                     .add_string_choice("metric", "metric")
                             })
@@ -302,18 +297,21 @@ impl EventHandler for Handler {
 
     async fn message(&self, _ctx: Context, _new_message: Message) {
         // very important! this avoids infinite loops and whatnot
-        if !_new_message.author.bot {
-            let thank_re = Regex::new(r"(?i)(than[kx])|(tysm)|(^ty)|(\s+ty\s+)").unwrap();
-            if thank_re.is_match(&_new_message.content) && !_new_message.mentions.is_empty() {
-                if let Err(err) = rep::thank(&_ctx, &_new_message).await {
-                    println!("Something went wrong! {}", err);
-                }
-            } else if _new_message.mentions_me(&_ctx).await.unwrap_or(false) {
-                let bad_re = Regex::new(r"(?i)(bad)").unwrap();
-                let good_re =
-                    Regex::new(r"(?i)(good bot)|(good job)|(nice work)|(nailed it)|(nice job)")
-                        .unwrap();
-                if bad_re.is_match(&_new_message.content) {
+        if _new_message.author.bot {
+            return;
+        }
+        let thank_re = Regex::new(r"(?i)(than[kx])|(tysm)|(^ty)|(\s+ty\s+)").unwrap();
+        if thank_re.is_match(&_new_message.content) && !_new_message.mentions.is_empty() {
+            if let Err(err) = rep::thank(&_ctx, &_new_message).await {
+                println!("Something went wrong! {}", err);
+            }
+        } else if _new_message.mentions_me(&_ctx).await.unwrap_or(false) {
+            let bad_re = Regex::new(r"(?i)(bad)").unwrap();
+            let good_re =
+                Regex::new(r"(?i)(good bot)|(good job)|(nice work)|(nailed it)|(nice job)")
+                    .unwrap();
+            if bad_re.is_match(&_new_message.content) {
+                log_err(
                     _new_message
                         .reply(
                             &_ctx,
@@ -321,8 +319,10 @@ impl EventHandler for Handler {
                                 .push("https://c.tenor.com/8QjR5hC91b0AAAAC/nichijou-nano.gif")
                                 .build(),
                         )
-                        .await;
-                } else if good_re.is_match(&_new_message.content) {
+                        .await,
+                );
+            } else if good_re.is_match(&_new_message.content) {
+                log_err(
                     _new_message
                         .reply(
                             &_ctx,
@@ -330,34 +330,34 @@ impl EventHandler for Handler {
                                 .push("https://i.imgur.com/bgiANhm.gif")
                                 .build(),
                         )
-                        .await;
-                }
-            } else if !&_new_message
-                .content
-                .starts_with(&env::var("PREFIX").unwrap_or("nano, ".to_string()))
-            {
-                match detect_language(&_new_message.content) {
-                    // only translate for non-English text detected with high probability
-                    Some(Language::English) => (),
-                    None => (),
-                    Some(other) => {
-                        match translate::translate(
-                            &_new_message.content,
-                            Some(other),
-                            Language::English,
-                        )
-                        .await
-                        {
-                            Some(result) => {
-                                if result == _new_message.content {
-                                    println!("Translation detection failed");
-                                    dbg!(result.clone());
-                                } else if let Err(why) = _new_message.reply(&_ctx, result).await {
-                                    println!("Error sending message: {}", why);
-                                }
+                        .await,
+                );
+            }
+        } else if !&_new_message
+            .content
+            .starts_with(&env::var("PREFIX").unwrap_or("nano, ".to_string()))
+        {
+            match detect_language(&_new_message.content) {
+                // only translate for non-English text detected with high probability
+                Some(Language::English) => (),
+                None => (),
+                Some(other) => {
+                    match translate::translate(
+                        &_new_message.content,
+                        Some(other),
+                        Language::English,
+                    )
+                    .await
+                    {
+                        Some(result) => {
+                            if result == _new_message.content {
+                                println!("Translation detection failed");
+                                dbg!(result.clone());
+                            } else if let Err(why) = _new_message.reply(&_ctx, result).await {
+                                println!("Error sending message: {}", why);
                             }
-                            None => println!("Error translating"),
                         }
+                        None => println!("Error translating"),
                     }
                 }
             }
@@ -459,7 +459,7 @@ impl EventHandler for Handler {
                                 }
                             },
                             "leaderboard" => {
-                                let default10 = ApplicationCommandInteractionDataOptionValue::Integer(10);
+                                let default10 = CommandDataOptionValue::Integer(10);
                                 let n = command
                                     .data
                                     .options
@@ -469,7 +469,7 @@ impl EventHandler for Handler {
                                         &default10
                                     );
 
-                                if let &ApplicationCommandInteractionDataOptionValue::Integer(n) = n
+                                if let &CommandDataOptionValue::Integer(n) = n
                                 {
                                     if let Ok(leaders) = rep::top_rep(n as isize) {
                                         let mut list = String::from("");
@@ -498,7 +498,7 @@ impl EventHandler for Handler {
                                     .get(0)
                                     .and_then(|x| x.resolved.as_ref());
 
-                                if let Some(ApplicationCommandInteractionDataOptionValue::String(
+                                if let Some(CommandDataOptionValue::String(
                                     content,
                                 )) = message
                                 {
@@ -536,7 +536,7 @@ impl EventHandler for Handler {
                                     .and_then(|x| x.resolved.as_ref());
 
                                 let user = match message {
-                                    Some(ApplicationCommandInteractionDataOptionValue::User(
+                                    Some(CommandDataOptionValue::User(
                                         usr,
                                         _,
                                     )) => usr,
@@ -560,7 +560,7 @@ impl EventHandler for Handler {
                                     .and_then(|x| x.resolved.as_ref());
 
                                 let user = match message {
-                                    Some(ApplicationCommandInteractionDataOptionValue::User(
+                                    Some(CommandDataOptionValue::User(
                                         usr,
                                         _,
                                     )) => usr,
@@ -584,7 +584,7 @@ impl EventHandler for Handler {
                                     .get(0)
                                     .and_then(|x| x.resolved.as_ref());
 
-                                if let Some(ApplicationCommandInteractionDataOptionValue::String(
+                                if let Some(CommandDataOptionValue::String(
                                     content,
                                 )) = message
                                 {
@@ -607,13 +607,13 @@ impl EventHandler for Handler {
                                     .get(0)
                                     .and_then(|x| x.resolved.as_ref());
 
-                                if let Some(ApplicationCommandInteractionDataOptionValue::String(
+                                if let Some(CommandDataOptionValue::String(
                                     content,
                                 )) = message
                                 {
                                     let texed = format!(
                                         "${}$",
-                                        panmath::unicodeify(content)
+                                        panmath::unicodeify(&content)
                                             .unwrap_or("Couldn't parse <-<".to_string())
                                     );
                                     msg.content(texed).allowed_mentions(|am| am.empty_parse())
@@ -635,7 +635,6 @@ impl EventHandler for Handler {
                                         msg.content("Something went wrong...".to_string())
                                     }
                                 } else {
-                                    dbg!(f_res);
                                     msg.content("Something went wrong...".to_string())
                                 }
                             }

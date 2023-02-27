@@ -1,9 +1,8 @@
 //! Trait that responds to commands.
 
 use serenity::{
-    builder::CreateInteractionResponseData,
-    client::Context,
-    model::interactions::application_command::{ApplicationCommand, ApplicationCommandInteraction},
+    builder::CreateInteractionResponseData, client::Context, model::application::command::Command,
+    model::application::interaction::application_command::ApplicationCommandInteraction,
 };
 
 use crate::{
