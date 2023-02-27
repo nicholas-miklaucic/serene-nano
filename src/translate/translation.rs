@@ -1,16 +1,12 @@
 //! DeepL translation API wrapper.
 
-use deepl_openapi::{
-    apis::{
-        configuration::{ApiKey, Configuration},
-        translate_text_api::translate_text,
-    },
+use deepl_openapi::apis::{
+    configuration::{ApiKey, Configuration},
+    translate_text_api::translate_text,
 };
 use lingua::Language;
-use reqwest;
 
-use std::{env};
-
+use std::env;
 
 use crate::translate::available_langs::{lingua_to_deepl_source, lingua_to_deepl_target};
 
@@ -25,7 +21,7 @@ pub(crate) async fn translate(
 
     // setting this to an invalid key will trigger a request error which saves me having to make a
     // custom error type here
-    let api_key = env::var("DEEPL_KEY").unwrap_or("bad".to_string());
+    let api_key = env::var("DEEPL_KEY").unwrap_or_else(|_| "bad".to_string());
 
     let config = Configuration {
         base_path: "https://api-free.deepl.com/v2".to_owned(),
@@ -65,13 +61,13 @@ pub(crate) async fn translate(
                 format!(
                     "Translated from {}:\n{}",
                     src.to_string(),
-                    res.text.unwrap_or("".to_string())
+                    res.text.unwrap_or_default()
                 )
             } else {
-                format!("{}", res.text.unwrap_or("".to_string()))
+                res.text.unwrap_or_default()
             }
         }
-        None => format!("{}", res.text.unwrap_or("".to_string())),
+        None => res.text.unwrap_or_default(),
     })
 }
 

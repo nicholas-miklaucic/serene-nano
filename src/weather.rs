@@ -8,13 +8,15 @@ use std::{
 use reqwest::RequestBuilder;
 use serde::{Deserialize, Serialize};
 use serenity::{
-    builder::{CreateMessage},
-    client::Context,
-    model::interactions::application_command::ApplicationCommandInteraction,
+    builder::CreateMessage, client::Context,
+    model::application::interaction::application_command::ApplicationCommandInteraction,
 };
 use serenity_additions::menu::{MenuBuilder, Page};
 
-use crate::geolocation::{find_location, Location};
+use crate::{
+    geolocation::{find_location, Location},
+    utils::log_err,
+};
 
 /// Groups of units for the weather.
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
@@ -158,6 +160,7 @@ fn get_weather_icon_url(wmo_code: usize) -> String {
 }
 
 /// Gets the weather forecast given a name and units.
+#[allow(unused)]
 pub(crate) async fn get_weather_forecast_from_name(
     name: &str,
     units: &UnitSystem,
@@ -226,15 +229,12 @@ pub(crate) async fn weather_forecast_msg<'a, 'b>(
             break;
         }
     }
-    match menu
-        .add_pages(pages)
-        .show_help()
-        .build(ctx, command.channel_id)
-        .await
-    {
-        Ok(_) => {}
-        Err(_) => {}
-    }
+    log_err(
+        menu.add_pages(pages)
+            .show_help()
+            .build(ctx, command.channel_id)
+            .await,
+    );
 }
 
 #[cfg(test)]

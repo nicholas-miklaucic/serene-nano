@@ -20,7 +20,7 @@ pub(crate) fn detect_language(msg: &str) -> Option<Language> {
         .collect();
 
     if msg.starts_with("---") {
-        dbg!(msg.clone());
+        dbg!(msg);
         dbg!(conf_vals.clone());
         dbg!(msg.chars().filter(|c| c.is_numeric()).count());
         dbg!(msg.chars().count());

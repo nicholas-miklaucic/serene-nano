@@ -1,6 +1,4 @@
 //! Program to get poetry from the Web.
-use reqwest;
-use scraper;
 
 /// A poem with poet, link to site, and text.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -31,11 +29,11 @@ pub(crate) async fn search_poem(query: &str) -> Option<Poem> {
     let mut urls = vec![];
     for el_ref in scraper::Html::parse_fragment(&text).select(&link) {
         let href = el_ref.value().attr("href");
-        if let None = href {
+        if href.is_none() {
             continue;
         }
         let mut url = "https://poetryfoundation.org".to_string();
-        url.push_str(&(href.unwrap().clone()));
+        url.push_str(href.unwrap());
         urls.push(url);
     }
 

@@ -9,7 +9,7 @@ use serenity::{
         application::interaction::application_command::{
             ApplicationCommandInteraction, CommandDataOptionValue,
         },
-        prelude::{User},
+        prelude::User,
     },
 };
 
@@ -48,13 +48,10 @@ pub(crate) fn add_elements_command<'a, 'b>(
     msg: &'a mut CreateInteractionResponseData<'b>,
 ) -> (&'a mut CreateInteractionResponseData<'b>, RedisResult<()>) {
     let client_res = redis::Client::open(REDIS_URL);
-    let client;
-    match client_res {
-        Ok(client_val) => {
-            client = client_val;
-        }
+    let client = match client_res {
+        Ok(client_val) => client_val,
         Err(e) => return (msg, Err(e)),
-    }
+    };
     let mut con;
     let con_res = client.get_connection();
     match con_res {
@@ -71,10 +68,9 @@ pub(crate) fn add_elements_command<'a, 'b>(
                 name = Some(val);
             }
         } else if opt.name.starts_with("element") {
-            match &opt.value {
-                Some(serde_json::Value::String(el)) => elements.push(el.to_string()),
-                _ => {}
-            };
+            if let Some(serde_json::Value::String(el)) = &opt.value {
+                elements.push(el.to_string());
+            }
         }
     }
     if let Some(n) = name {
@@ -96,13 +92,10 @@ pub(crate) fn rem_elements_command<'a, 'b>(
     msg: &'a mut CreateInteractionResponseData<'b>,
 ) -> (&'a mut CreateInteractionResponseData<'b>, RedisResult<()>) {
     let client_res = redis::Client::open(REDIS_URL);
-    let client;
-    match client_res {
-        Ok(client_val) => {
-            client = client_val;
-        }
+    let client = match client_res {
+        Ok(client_val) => client_val,
         Err(e) => return (msg, Err(e)),
-    }
+    };
     let mut con;
     let con_res = client.get_connection();
     match con_res {
@@ -119,9 +112,8 @@ pub(crate) fn rem_elements_command<'a, 'b>(
                 name = Some(val);
             }
         } else if opt.name.starts_with("element") {
-            match &opt.value {
-                Some(serde_json::Value::String(el)) => elements.push(el.to_string()),
-                _ => {}
+            if let Some(serde_json::Value::String(el)) = &opt.value {
+                elements.push(el.to_string());
             };
         }
     }
@@ -144,13 +136,10 @@ pub(crate) fn get_list_command<'a, 'b>(
     msg: &'a mut CreateInteractionResponseData<'b>,
 ) -> (&'a mut CreateInteractionResponseData<'b>, RedisResult<()>) {
     let client_res = redis::Client::open(REDIS_URL);
-    let client;
-    match client_res {
-        Ok(client_val) => {
-            client = client_val;
-        }
+    let client = match client_res {
+        Ok(client_val) => client_val,
         Err(e) => return (msg, Err(e)),
-    }
+    };
     let mut con;
     let con_res = client.get_connection();
     match con_res {
@@ -174,7 +163,7 @@ pub(crate) fn get_list_command<'a, 'b>(
             };
         } else if &opt.name == "user" {
             if let Some(CommandDataOptionValue::User(user_arg, _)) = &opt.resolved {
-                user = &user_arg;
+                user = user_arg;
             }
         }
     }

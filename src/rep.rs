@@ -26,7 +26,7 @@ pub(crate) fn get_user_rep(user: &User) -> redis::RedisResult<(usize, usize)> {
     let mut con = client.get_connection()?;
     let score = con.zscore("reputation", &user.name);
     let rank = con.zrevrank("reputation", &user.name);
-    score.and_then(|s| rank.and_then(|r: usize| Ok((s, r + 1))))
+    score.and_then(|s| rank.map(|r: usize| (s, r + 1)))
 }
 
 /// Returns a list of the top n users and their reputations.
@@ -90,8 +90,8 @@ pub(crate) async fn thank(ctx: &Context, msg: &Message) -> redis::RedisResult<()
 
         let mut reps = vec![];
         for user in &msg.mentions {
-            if can_thank(&msg.author, &user) {
-                let new_rep: usize = thank_user(&user, &mut con)?;
+            if can_thank(&msg.author, user) {
+                let new_rep: usize = thank_user(user, &mut con)?;
                 reps.push((&user.name, new_rep));
             }
         }

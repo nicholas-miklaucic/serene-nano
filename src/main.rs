@@ -13,31 +13,28 @@ mod weather;
 use crate::utils::log_err;
 use command_responder::{CommandResponder, StringContent};
 use geolocation::find_location;
-use lingua::{Language};
-use panmath;
+use lingua::Language;
+
 use rand::Rng;
 use rand::{self, prelude::IteratorRandom};
 use regex::Regex;
-use serenity::model::interactions::application_command::{ApplicationCommand, ResolvedTarget};
-use serenity::model::interactions::{Interaction, InteractionResponseType};
-use serenity::model::prelude::command::CommandOptionType;
-use serenity::model::prelude::interaction::application_command::CommandDataOptionValue;
+use serenity::model::application::interaction::InteractionResponseType;
+use serenity::model::prelude::command::{Command, CommandOptionType};
+use serenity::model::prelude::interaction::application_command::{
+    CommandDataOptionValue, ResolvedTarget,
+};
+use serenity::model::prelude::interaction::Interaction;
 use serenity::{
-    builder::{CreateMessage},
+    builder::CreateMessage,
     framework::standard::Delimiter,
-    model::{prelude::Activity},
+    model::prelude::Activity,
     utils::{content_safe, Color, ContentSafeOptions, MessageBuilder},
 };
 use serenity_additions::RegisterAdditions;
-use std::{
-    collections::{HashMap, HashSet},
-};
+use std::collections::{HashMap, HashSet};
+use std::io::{BufRead, BufReader};
 use std::{env, fs::File};
-use std::{
-    io::{BufRead, BufReader},
-};
 use translate::detection::detect_language;
-use wikipedia;
 
 #[macro_use]
 extern crate partial_application;
@@ -47,21 +44,14 @@ use serenity::{
     framework::standard::{
         help_commands,
         macros::{command, group, help},
-        Args, CommandGroup, CommandResult, HelpOptions,
-        StandardFramework,
+        Args, CommandGroup, CommandResult, HelpOptions, StandardFramework,
     },
-    http::{Http},
-    model::{
-        channel::{Message},
-        gateway::Ready,
-        id::{UserId},
-    },
+    http::Http,
+    model::{channel::Message, gateway::Ready, id::UserId},
     prelude::*,
 };
 
-use crate::weather::{
-    get_weather_forecast_from_loc, weather_forecast_msg, UnitSystem,
-};
+use crate::weather::{get_weather_forecast_from_loc, weather_forecast_msg, UnitSystem};
 
 struct Handler;
 
@@ -72,217 +62,214 @@ impl EventHandler for Handler {
 
         ctx.set_activity(Activity::playing("with Sakamoto")).await;
 
-        let _commands =
-            ApplicationCommand::set_global_application_commands(&ctx.http, |commands| {
-                commands
-                    .create_application_command(|command| {
-                        command
-                            .name("Source Anime GIFs")
-                            .kind(serenity::model::prelude::command::CommandType::Message)
-                    })
-                    .create_application_command(|command| {
-                        command.name("ping").description("A ping command")
-                    })
-                    .create_application_command(|command| {
-                        command
-                            .name("leaderboard")
-                            .description("Get the reputation leaderboard")
-                            .create_option(|option| {
-                                option
-                                    .name("how_many_users")
-                                    .description("The number of leaders to show (default 10)")
-                                    .kind(CommandOptionType::Integer)
-                                    .required(false)
-                            })
-                    })
-                    .create_application_command(|command| {
-                        command
-                            .name("say")
-                            .description("Have Nano say something")
-                            .create_option(|option| {
-                                option
-                                    .name("message")
-                                    .description("What to say")
-                                    .kind(CommandOptionType::String)
-                                    .required(true)
-                            })
-                    })
-                    .create_application_command(|command| {
-                        let mut cmd = command
-                            .name("add_elements")
-                            .description("Add elements to a list (creating it if nonexistent)")
-                            .create_option(|option| {
-                                option
-                                    .name("list_name")
-                                    .description("The name of the list to add to")
-                                    .kind(CommandOptionType::String)
-                                    .required(true)
-                            });
+        let _commands = Command::set_global_application_commands(&ctx.http, |commands| {
+            commands
+                .create_application_command(|command| {
+                    command
+                        .name("Source Anime GIFs")
+                        .kind(serenity::model::prelude::command::CommandType::Message)
+                })
+                .create_application_command(|command| {
+                    command.name("ping").description("A ping command")
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("leaderboard")
+                        .description("Get the reputation leaderboard")
+                        .create_option(|option| {
+                            option
+                                .name("how_many_users")
+                                .description("The number of leaders to show (default 10)")
+                                .kind(CommandOptionType::Integer)
+                                .required(false)
+                        })
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("say")
+                        .description("Have Nano say something")
+                        .create_option(|option| {
+                            option
+                                .name("message")
+                                .description("What to say")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                })
+                .create_application_command(|command| {
+                    let mut cmd = command
+                        .name("add_elements")
+                        .description("Add elements to a list (creating it if nonexistent)")
+                        .create_option(|option| {
+                            option
+                                .name("list_name")
+                                .description("The name of the list to add to")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        });
 
-                        for i in 1..=10 {
-                            cmd = cmd.create_option(|option| {
-                                option
-                                    .name(format!("element_{}", i))
-                                    .description("Value to add")
-                                    .kind(CommandOptionType::String)
-                                    .required(false)
-                            });
-                        }
+                    for i in 1..=10 {
+                        cmd = cmd.create_option(|option| {
+                            option
+                                .name(format!("element_{}", i))
+                                .description("Value to add")
+                                .kind(CommandOptionType::String)
+                                .required(false)
+                        });
+                    }
 
-                        cmd
-                    })
-                    .create_application_command(|command| {
-                        let mut cmd = command
-                            .name("rem_elements")
-                            .description("Remove elements from a list")
-                            .create_option(|option| {
-                                option
-                                    .name("list_name")
-                                    .description("The name of the list to add to")
-                                    .kind(CommandOptionType::String)
-                                    .required(true)
-                            });
+                    cmd
+                })
+                .create_application_command(|command| {
+                    let mut cmd = command
+                        .name("rem_elements")
+                        .description("Remove elements from a list")
+                        .create_option(|option| {
+                            option
+                                .name("list_name")
+                                .description("The name of the list to add to")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        });
 
-                        for i in 1..=10 {
-                            cmd = cmd.create_option(|option| {
-                                option
-                                    .name(format!("element_{}", i))
-                                    .description("Value to remove")
-                                    .kind(CommandOptionType::String)
-                                    .required(false)
-                            });
-                        }
+                    for i in 1..=10 {
+                        cmd = cmd.create_option(|option| {
+                            option
+                                .name(format!("element_{}", i))
+                                .description("Value to remove")
+                                .kind(CommandOptionType::String)
+                                .required(false)
+                        });
+                    }
 
-                        cmd
-                    })
-                    .create_application_command(|command| {
-                        command
-                            .name("get_list")
-                            .description("Get the elements from a user's list")
-                            .create_option(|option| {
-                                option
-                                    .name("list_name")
-                                    .description("The name of the list to add to")
-                                    .kind(CommandOptionType::String)
-                                    .required(true)
-                            })
-                            .create_option(|option| {
-                                option
-                                    .name("user")
-                                    .description("The user to get the list from (default: you)")
-                                    .kind(CommandOptionType::User)
-                                    .required(false)
-                            })
-                    })
-                    .create_application_command(|command| {
-                        command
-                            .name("reputation")
-                            .description("Get the rep of a user")
-                            .create_option(|option| {
-                                option
-                                    .name("user")
-                                    .description("The user to get rep for (defaults to you)")
-                                    .kind(CommandOptionType::User)
-                                    .required(false)
-                            })
-                    })
-                    .create_application_command(|command| {
-                        command
-                            .name("thank")
-                            .description("Thank a user")
-                            .create_option(|option| {
-                                option
-                                    .name("user")
-                                    .description("The user to thank")
-                                    .kind(CommandOptionType::User)
-                                    .required(true)
-                            })
-                    })
-                    .create_application_command(|command| {
-                        command
-                            .name("translate")
-                            .description("Translate text")
-                            .create_option(|option| {
-                                option
-                                    .name("text")
-                                    .description("The text to translate")
-                                    .kind(CommandOptionType::String)
-                                    .required(true)
-                            })
-                            .create_option(|option| {
-                                let source = option
-                                    .name("source")
-                                    .description("The source language (auto-detects if not given)")
-                                    .kind(CommandOptionType::String)
-                                    .required(false);
-                                for lang_name in translate::available_langs::available_lang_names()
-                                {
-                                    source.add_string_choice(&lang_name, &lang_name);
-                                }
-                                source
-                            })
-                            .create_option(|option| {
-                                let mut target = option
-                                    .name("target")
-                                    .description("The target language (defaults to English)")
-                                    .kind(CommandOptionType::String)
-                                    .required(false);
-                                for lang_name in translate::available_langs::available_lang_names()
-                                {
-                                    target = target.add_string_choice(&lang_name, &lang_name);
-                                }
-                                target
-                            })
-                    })
-                    .create_application_command(|command| {
-                        command
-                            .name("texify")
-                            .description("Translate to LaTeX")
-                            .create_option(|option| {
-                                option
-                                    .name("message")
-                                    .description("Input to translate")
-                                    .kind(CommandOptionType::String)
-                                    .required(true)
-                            })
-                    })
-                    .create_application_command(|command| {
-                        command
-                            .name("prettify")
-                            .description("Translate to fancy Unicode")
-                            .create_option(|option| {
-                                option
-                                    .name("message")
-                                    .description("Input to translate")
-                                    .kind(CommandOptionType::String)
-                                    .required(true)
-                            })
-                    })
-                    .create_application_command(|command| {
-                        command
-                            .name("weather")
-                            .description("Get the weather for a place")
-                            .create_option(|opt| {
-                                opt.name("location")
-                                    .description("Place name or postal code")
-                                    .kind(CommandOptionType::String)
-                                    .required(true)
-                            })
-                            .create_option(|opt| {
-                                opt.name("units")
-                                    .description("Measurement units to use")
-                                    .kind(CommandOptionType::String)
-                                    .add_string_choice("imperial", "imperial")
-                                    .add_string_choice("metric", "metric")
-                            })
-                    })
-                    .create_application_command(|command| {
-                        command
-                            .name("topic")
-                            .description("Start a conversation with a random question")
-                    })
-            })
-            .await;
+                    cmd
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("get_list")
+                        .description("Get the elements from a user's list")
+                        .create_option(|option| {
+                            option
+                                .name("list_name")
+                                .description("The name of the list to add to")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                        .create_option(|option| {
+                            option
+                                .name("user")
+                                .description("The user to get the list from (default: you)")
+                                .kind(CommandOptionType::User)
+                                .required(false)
+                        })
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("reputation")
+                        .description("Get the rep of a user")
+                        .create_option(|option| {
+                            option
+                                .name("user")
+                                .description("The user to get rep for (defaults to you)")
+                                .kind(CommandOptionType::User)
+                                .required(false)
+                        })
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("thank")
+                        .description("Thank a user")
+                        .create_option(|option| {
+                            option
+                                .name("user")
+                                .description("The user to thank")
+                                .kind(CommandOptionType::User)
+                                .required(true)
+                        })
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("translate")
+                        .description("Translate text")
+                        .create_option(|option| {
+                            option
+                                .name("text")
+                                .description("The text to translate")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                        .create_option(|option| {
+                            let source = option
+                                .name("source")
+                                .description("The source language (auto-detects if not given)")
+                                .kind(CommandOptionType::String)
+                                .required(false);
+                            for lang_name in translate::available_langs::available_lang_names() {
+                                source.add_string_choice(&lang_name, &lang_name);
+                            }
+                            source
+                        })
+                        .create_option(|option| {
+                            let mut target = option
+                                .name("target")
+                                .description("The target language (defaults to English)")
+                                .kind(CommandOptionType::String)
+                                .required(false);
+                            for lang_name in translate::available_langs::available_lang_names() {
+                                target = target.add_string_choice(&lang_name, &lang_name);
+                            }
+                            target
+                        })
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("texify")
+                        .description("Translate to LaTeX")
+                        .create_option(|option| {
+                            option
+                                .name("message")
+                                .description("Input to translate")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("prettify")
+                        .description("Translate to fancy Unicode")
+                        .create_option(|option| {
+                            option
+                                .name("message")
+                                .description("Input to translate")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("weather")
+                        .description("Get the weather for a place")
+                        .create_option(|opt| {
+                            opt.name("location")
+                                .description("Place name or postal code")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                        .create_option(|opt| {
+                            opt.name("units")
+                                .description("Measurement units to use")
+                                .kind(CommandOptionType::String)
+                                .add_string_choice("imperial", "imperial")
+                                .add_string_choice("metric", "metric")
+                        })
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("topic")
+                        .description("Start a conversation with a random question")
+                })
+        })
+        .await;
         if let Err(e) = _commands {
             println!("Error making slash commands: {}", e);
         }
@@ -328,7 +315,7 @@ impl EventHandler for Handler {
             }
         } else if !&_new_message
             .content
-            .starts_with(&env::var("PREFIX").unwrap_or("nano, ".to_string()))
+            .starts_with(&env::var("PREFIX").unwrap_or_else(|_| "nano, ".to_string()))
         {
             match detect_language(&_new_message.content) {
                 // only translate for non-English text detected with high probability
@@ -383,12 +370,8 @@ impl EventHandler for Handler {
                         )
                         .await
                         {
-                            Some(result) => {
-                                format!("{}", result)
-                            }
-                            None => {
-                                format!("Error translating :(")
-                            }
+                            Some(result) => result.to_string(),
+                            None => "Error translating :(".to_string(),
                         }
                     }
                 }
@@ -401,28 +384,25 @@ impl EventHandler for Handler {
                     let mut units = UnitSystem::Metric;
                     let mut loc_name = "New York, NY";
                     for opt in &command.data.options {
-                        match &opt.value {
-                            Some(serde_json::Value::String(s)) => {
-                                if opt.name.as_str() == "units" {
-                                    let n = opt.name.as_str();
-                                    units = match n {
-                                        "metric" => UnitSystem::Metric,
-                                        "imperial" => UnitSystem::Imperial,
-                                        _ => units,
-                                    }
-                                } else if opt.name.as_str() == "location" {
-                                    loc_name = s.as_str();
+                        if let Some(serde_json::Value::String(s)) = &opt.value {
+                            if opt.name.as_str() == "units" {
+                                let n = opt.name.as_str();
+                                units = match n {
+                                    "metric" => UnitSystem::Metric,
+                                    "imperial" => UnitSystem::Imperial,
+                                    _ => units,
                                 }
+                            } else if opt.name.as_str() == "location" {
+                                loc_name = s.as_str();
                             }
-                            _ => {}
                         }
                     }
                     let loc = find_location(loc_name).await;
                     match &loc {
                         Some(l) => {
-                            let forecast = get_weather_forecast_from_loc(&l, &units).await;
+                            let forecast = get_weather_forecast_from_loc(l, &units).await;
                             if let Some(f) = forecast {
-                                weather_forecast_msg(&l, &f, &command, &ctx).await;
+                                weather_forecast_msg(l, &f, &command, &ctx).await;
                             }
                         }
                         None => {}
@@ -435,9 +415,7 @@ impl EventHandler for Handler {
             if let Err(why) = command
                 .create_interaction_response(&ctx.http, |response| {
                     response
-                        .kind(match command.data.name.as_str() {
-                            _ => InteractionResponseType::ChannelMessageWithSource,
-                        })
+                        .kind(InteractionResponseType::ChannelMessageWithSource)
                         .interaction_response_data(|msg| match command.data.name.as_str() {
                             "ping" => msg.content("Pong!"),
                             "Source Anime GIFs" => {
@@ -536,7 +514,7 @@ impl EventHandler for Handler {
                                     _ => &command.user,
                                 };
 
-                                if let Ok((rep, rank)) = rep::get_user_rep(&user) {
+                                if let Ok((rep, rank)) = rep::get_user_rep(user) {
                                     msg.content(format!(
                                         "User **{}** has rep **{}** (rank **{}**)",
                                         user.name, rep, rank
@@ -581,13 +559,13 @@ impl EventHandler for Handler {
                                     content,
                                 )) = message
                                 {
-                                    let raw_tex = panmath::texify(&content).unwrap_or("Couldn't parse <-<".to_string());
+                                    let raw_tex = panmath::texify(content).unwrap_or_else(|| "Couldn't parse <-<".to_string());
                                     let tex_url = format!(
                                         r"https://latex.codecogs.com/png.latex?\dpi{{300}}{{\color[rgb]{{0.7,0.7,0.7}}{}",
                                         raw_tex
                                     )
-                                        .replace(" ", "&space;")
-                                        .replace("\\", "%5C");
+                                        .replace(' ', "&space;")
+                                        .replace('\\', "%5C");
                                     msg.content(tex_url).allowed_mentions(|am| am.empty_parse())
                                 } else {
                                     msg.content("Couldn't say nothin' :()")
@@ -606,8 +584,8 @@ impl EventHandler for Handler {
                                 {
                                     let texed = format!(
                                         "${}$",
-                                        panmath::unicodeify(&content)
-                                            .unwrap_or("Couldn't parse <-<".to_string())
+                                        panmath::unicodeify(content)
+                                            .unwrap_or_else(|| "Couldn't parse <-<".to_string())
                                     );
                                     msg.content(texed).allowed_mentions(|am| am.empty_parse())
                                 } else {
@@ -695,7 +673,7 @@ async fn my_help(
 async fn wiki(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let wiki = wikipedia::Wikipedia::<wikipedia::http::default::Client>::default();
     let titles = wiki.search(args.rest());
-    let page = wiki.page_from_title(titles.unwrap().iter().next().unwrap().to_string());
+    let page = wiki.page_from_title(titles.unwrap().first().unwrap().to_string());
     let wiki_text = page.get_summary().unwrap();
     // hacky way of avoiding huge newlines around math text: work on making this better in the
     // future
@@ -767,7 +745,7 @@ async fn tex_source(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let message = args.rest().to_string();
     let texed = format!(
         "${}$",
-        panmath::texify(&message).unwrap_or("Couldn't parse <-<".to_string())
+        panmath::texify(&message).unwrap_or_else(|| "Couldn't parse <-<".to_string())
     );
     let opts = match msg.guild_id {
         Some(id) => ContentSafeOptions::default().display_as_member_from(id),
@@ -783,13 +761,13 @@ async fn tex_source(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 #[command]
 async fn texify(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let message = args.rest().to_string();
-    let raw_tex = panmath::texify(&message).unwrap_or("Couldn't parse <-<".to_string());
+    let raw_tex = panmath::texify(&message).unwrap_or_else(|| "Couldn't parse <-<".to_string());
     let tex_url = format!(
         r"https://latex.codecogs.com/png.latex?\dpi{{300}}{{\color[rgb]{{0.7,0.7,0.7}}{}",
         raw_tex
     )
-    .replace(" ", "&space;")
-    .replace("\\", "%5C");
+    .replace(' ', "&space;")
+    .replace('\\', "%5C");
     if let Err(why) = msg.reply(ctx, tex_url).await {
         println!("Error saying message: {:?}", why);
     }
@@ -800,10 +778,8 @@ async fn texify(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 #[command]
 async fn prettify(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let message = args.rest().to_string();
-    let prettified = format!(
-        "{}",
-        panmath::unicodeify(&message).unwrap_or("Couldn't parse <-<".to_string())
-    );
+    let prettified =
+        panmath::unicodeify(&message).unwrap_or_else(|| "Couldn't parse <-<".to_string());
     let opts = match msg.guild_id {
         Some(id) => ContentSafeOptions::default().display_as_member_from(id),
         None => ContentSafeOptions::default(),
@@ -838,19 +814,17 @@ async fn tl(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let source_lang;
     let target_lang;
     let text;
-    if args.message().contains(">") {
+    if args.message().contains('>') {
         let source_str: String = args.parse().unwrap();
         let source = source_str.to_uppercase().parse();
-        source_lang = source
-            .and_then(|c| Ok(Language::from_iso_code_639_1(&c)))
-            .ok();
+        source_lang = source.map(|c| Language::from_iso_code_639_1(&c)).ok();
         args.advance();
         args.advance();
         let target_str: String = args.parse().unwrap();
         dbg!(target_str.clone());
         let target = target_str.to_uppercase().parse();
         target_lang = target
-            .and_then(|c| Ok(Language::from_iso_code_639_1(&c)))
+            .map(|c| Language::from_iso_code_639_1(&c))
             .unwrap_or(Language::English);
 
         args.advance();
@@ -862,8 +836,8 @@ async fn tl(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     }
 
     let reply = match translate::translate(text, source_lang.clone(), target_lang.clone()).await {
-        Some(result) => format!("{}", result),
-        None => format!("Error while translating"),
+        Some(result) => result,
+        None => "Error while translating".to_string(),
     };
 
     let opts = match msg.guild_id {
@@ -881,7 +855,7 @@ async fn tl(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 #[command]
 async fn ask(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
     let random_i = rand::thread_rng().gen_range(0..20);
-    const CHOICES: [&'static str; 20] = [
+    const CHOICES: [&str; 20] = [
         "It is certain.",
         "It is decidedly so.",
         "Without a doubt.",
@@ -947,7 +921,7 @@ async fn main() {
         .configure(|c| {
             c.with_whitespace(true)
                 .on_mention(Some(bot_id))
-                .prefix(env::var("PREFIX").unwrap_or("nano, ".to_string()))
+                .prefix(env::var("PREFIX").unwrap_or_else(|_| "nano, ".to_string()))
                 // In this case, if "," would be first, a message would never
                 // be delimited at ", ", forcing you to trim your arguments if you
                 // want to avoid whitespaces at the start of each.
