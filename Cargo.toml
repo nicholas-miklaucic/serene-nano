@@ -20,7 +20,7 @@ rand = "0.8.4"
 uuid = { version = "0.8", features = ["v4"] }
 serenity-additions = "0.3.4"
 deepl-openapi = "2.7.1"
-panmath = "0.1.1"
+panmath = "0.1.2"
 
 [dependencies.serenity]
 default-features = false
