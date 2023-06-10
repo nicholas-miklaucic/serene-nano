@@ -9,6 +9,7 @@ mod trace_moe;
 mod translate;
 mod utils;
 mod weather;
+mod typst_eqtn;
 
 use crate::utils::log_err;
 use command_responder::{CommandResponder, StringContent};
@@ -31,9 +32,13 @@ use serenity::{
     utils::{content_safe, Color, ContentSafeOptions, MessageBuilder},
 };
 use serenity_additions::RegisterAdditions;
+use serenity::model::channel::AttachmentType;
+use weather::WeatherResponse;
 use std::collections::{HashMap, HashSet};
+use std::f32::consts::E;
 use std::io::{BufRead, BufReader};
 use std::{env, fs::File};
+use std::borrow::Cow;
 use translate::detection::detect_language;
 
 #[macro_use]
@@ -93,6 +98,18 @@ impl EventHandler for Handler {
                                 .name("message")
                                 .description("What to say")
                                 .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                })
+               .create_application_command(|command| {
+                    command
+                        .name("lorem")
+                        .description("Lorem ipsum!")
+                        .create_option(|option| {
+                            option
+                                .name("number")
+                                .description("Number of random words")
+                                .kind(CommandOptionType::Integer)
                                 .required(true)
                         })
                 })
@@ -416,7 +433,8 @@ impl EventHandler for Handler {
                 .create_interaction_response(&ctx.http, |response| {
                     response
                         .kind(InteractionResponseType::ChannelMessageWithSource)
-                        .interaction_response_data(|msg| match command.data.name.as_str() {
+                        .interaction_response_data(|msg| 
+                            match command.data.name.as_str() {
                             "ping" => msg.content("Pong!"),
                             "Source Anime GIFs" => {
                                 match command.data.target() {
@@ -608,6 +626,26 @@ impl EventHandler for Handler {
                                 } else {
                                     msg.content("Something went wrong...".to_string())
                                 }
+                            }
+                            "lorem" => {
+                                let mess = command
+                                .data
+                                .options
+                                .get(0)
+                                .and_then(|x| x.resolved.as_ref());
+
+                            if let Some(CommandDataOptionValue::Integer(n))= mess{
+                                if *n<=0{
+                                    msg.content(typst_eqtn::my_lorem(10))
+                                }else{
+                                    msg.content(typst_eqtn::my_lorem(*n as usize))
+                                    // .add_file(AttachmentType::Bytes { data: Cow::from(vec![1,2,3]), filename: "what.jpg".into() })
+
+                                }
+                            }
+                            else {
+                                msg.content("oopsie")
+                            }
                             }
                             _ => msg.content("Drawing a blank...".to_string()),
                         })
