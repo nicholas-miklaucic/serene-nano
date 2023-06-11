@@ -24,7 +24,12 @@ panmath = "0.1.2"
 typst = { git = "https://github.com/typst/typst" }
 typst-library = { git = "https://github.com/typst/typst" }
 comemo = "0.3.0"
-
+time = "0.3.22"
+ariadne = "0.3.0"
+thiserror = "1.0.40"
+image = { version = "0.24", default_features = false, features = ["png"] }
+bytemuck = "1.13.1"
+once_cell = "1.18.0"
 
 [dependencies.serenity]
 default-features = false

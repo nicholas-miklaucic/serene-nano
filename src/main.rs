@@ -9,6 +9,7 @@ mod trace_moe;
 mod translate;
 mod utils;
 mod weather;
+mod typst_main;
 mod typst_eqtn;
 
 use crate::utils::log_err;
@@ -37,9 +38,11 @@ use weather::WeatherResponse;
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::E;
 use std::io::{BufRead, BufReader};
+use std::sync::Arc;
 use std::{env, fs::File};
 use std::borrow::Cow;
 use translate::detection::detect_language;
+use once_cell::sync::Lazy;
 
 #[macro_use]
 extern crate partial_application;
@@ -59,6 +62,8 @@ use serenity::{
 use crate::weather::{get_weather_forecast_from_loc, weather_forecast_msg, UnitSystem};
 
 struct Handler;
+static typst_base:Lazy<Arc<typst_main::TypstEssentials>> =  Lazy::new(|| Arc::new(typst_main::TypstEssentials::new()));
+
 
 #[async_trait]
 impl EventHandler for Handler {
@@ -113,6 +118,19 @@ impl EventHandler for Handler {
                                 .required(true)
                         })
                 })
+                .create_application_command(|command| {
+                    command
+                        .name("typ")
+                        .description("Renders using typst")
+                        .create_option(|option| {
+                            option
+                                .name("code")
+                                .description("Equation to render")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                })
+
                 .create_application_command(|command| {
                     let mut cmd = command
                         .name("add_elements")
@@ -633,12 +651,13 @@ impl EventHandler for Handler {
                                 .options
                                 .get(0)
                                 .and_then(|x| x.resolved.as_ref());
+                            
 
                             if let Some(CommandDataOptionValue::Integer(n))= mess{
                                 if *n<=0{
-                                    msg.content(typst_eqtn::my_lorem(10))
+                                    msg.content(typst_main::my_lorem(10))
                                 }else{
-                                    msg.content(typst_eqtn::my_lorem(*n as usize))
+                                    msg.content(typst_main::my_lorem(*n as usize))
                                     // .add_file(AttachmentType::Bytes { data: Cow::from(vec![1,2,3]), filename: "what.jpg".into() })
 
                                 }
@@ -646,6 +665,29 @@ impl EventHandler for Handler {
                             else {
                                 msg.content("oopsie")
                             }
+                            },
+                            "typ"=>{
+                                let mess = command
+                                .data
+                                .options
+                                .get(0)
+                                .and_then(|x| x.resolved.as_ref());
+
+                            if let Some(CommandDataOptionValue::String(source))= mess{
+
+                                if let Ok(im) = typst_main::render(typst_base.clone(), source){
+                                    msg.content(
+                                        format!("```\n{}\n```", source)
+                                    ).add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into() })
+                                }else{
+                                     msg.content(
+                                        format!("```\n{}\n```\nAn error occurred...", source)
+                                    )
+                                }
+                            }else{
+                                msg.content("Bigger oopsie")
+                            }
+                            
                             }
                             _ => msg.content("Drawing a blank...".to_string()),
                         })
@@ -927,6 +969,7 @@ async fn ask(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
 
 #[tokio::main]
 async fn main() {
+
     // Configure the client with your Discord bot token in the environment.
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
 
