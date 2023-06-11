@@ -10,7 +10,6 @@ mod translate;
 mod utils;
 mod weather;
 mod typst_main;
-mod typst_eqtn;
 
 use crate::utils::log_err;
 use command_responder::{CommandResponder, StringContent};
