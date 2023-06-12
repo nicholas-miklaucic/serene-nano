@@ -9,7 +9,9 @@ mod trace_moe;
 mod translate;
 mod utils;
 mod weather;
+mod typst_base;
 mod typst_main;
+
 
 use crate::utils::log_err;
 use command_responder::{CommandResponder, StringContent};
@@ -39,7 +41,6 @@ use std::f32::consts::E;
 use std::io::{BufRead, BufReader};
 use std::sync::Arc;
 use std::{env, fs::File};
-use std::borrow::Cow;
 use translate::detection::detect_language;
 use once_cell::sync::Lazy;
 
@@ -61,7 +62,7 @@ use serenity::{
 use crate::weather::{get_weather_forecast_from_loc, weather_forecast_msg, UnitSystem};
 
 struct Handler;
-static typst_base:Lazy<Arc<typst_main::TypstEssentials>> =  Lazy::new(|| Arc::new(typst_main::TypstEssentials::new()));
+static TYPST_BASE:Lazy<Arc<typst_base::TypstEssentials>> =  Lazy::new(|| Arc::new(typst_base::TypstEssentials::new()));
 
 
 #[async_trait]
@@ -119,7 +120,7 @@ impl EventHandler for Handler {
                 })
                 .create_application_command(|command| {
                     command
-                        .name("typ")
+                        .name("typst_render")
                         .description("Renders using typst")
                         .create_option(|option| {
                             option
@@ -129,7 +130,18 @@ impl EventHandler for Handler {
                                 .required(true)
                         })
                 })
-
+                .create_application_command(|command| {
+                    command
+                        .name("typst_equation")
+                        .description("Renders using typst")
+                        .create_option(|option| {
+                            option
+                                .name("code")
+                                .description("Equation to render")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                })
                 .create_application_command(|command| {
                     let mut cmd = command
                         .name("add_elements")
@@ -665,7 +677,7 @@ impl EventHandler for Handler {
                                 msg.content("oopsie")
                             }
                             },
-                            "typ"=>{
+                            "typst_render"=>{
                                 let mess = command
                                 .data
                                 .options
@@ -674,7 +686,31 @@ impl EventHandler for Handler {
 
                             if let Some(CommandDataOptionValue::String(source))= mess{
 
-                                if let Ok(im) = typst_main::render(typst_base.clone(), source){
+                                if let Ok(im) = typst_main::render(TYPST_BASE.clone(), source){
+                                    msg.content(
+                                        format!("```\n{}\n```", source)
+                                    ).add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into() })
+                                }else{
+                                     msg.content(
+                                        format!("```\n{}\n```\nAn error occurred...", source)
+                                    )
+                                }
+                            }else{
+                                msg.content("Bigger oopsie")
+                            }
+                            
+                            },
+                            "typst_equation"=>{
+                                let mess = command
+                                .data
+                                .options
+                                .get(0)
+                                .and_then(|x| x.resolved.as_ref());
+
+                            if let Some(CommandDataOptionValue::String(source))= mess{
+                                let source_with_limiters = format!("${}$", source);
+
+                                if let Ok(im) = typst_main::render(TYPST_BASE.clone(), &source_with_limiters ){
                                     msg.content(
                                         format!("```\n{}\n```", source)
                                     ).add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into() })
