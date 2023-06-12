@@ -1,7 +1,6 @@
 use std::io::Cursor;
-use image;
 use std::sync::Arc;
-use typst::geom::{Color, RgbaColor};
+use typst::geom::{RgbaColor};
 use typst_library::text::lorem;
 
 use crate::typst_base::{TypstEssentials, RenderErrors, ToCompile, determine_pixels_per_point, Preamble};
@@ -14,9 +13,9 @@ pub(crate) fn my_lorem(num: usize) -> String {
 
 pub(crate) fn render(
     typst_base: Arc<TypstEssentials>,
-    source: &String,
+    source: &str,
 ) -> Result<Vec<u8>, RenderErrors> {
-    let mut source = source.clone();
+    let mut source = source.to_owned();
     
     source.insert_str(0, typst_base.preamble().as_str());
     let to_compile = ToCompile::new(typst_base, source.clone());

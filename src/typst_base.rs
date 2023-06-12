@@ -30,8 +30,10 @@ enum Theme{
 
 impl Preamble for Theme {
     fn preamble(&self)->String {
-        //TODO correct this
-        "".to_string()
+        match self {
+            Theme::Light=>"#set page(fill: white)\n".to_string(),
+            Theme::Dark=> "#set page(fill: rgb(49, 51, 56))\n#set text(fill: rgb(219, 222, 225))\n".to_string(),
+        }
     }
 }
 
@@ -144,7 +146,7 @@ impl typst::World for ToCompile {
         Err(typst::diag::FileError::NotFound(path.into()))
     }
 
-    fn source(&self, id: SourceId) -> &Source {
+    fn source(&self, _id: SourceId) -> &Source {
         &self.source
     }
     fn today(&self, offset: Option<i64>) -> Option<typst::eval::Datetime> {
@@ -159,6 +161,7 @@ pub(crate) enum RenderErrors {
     SourceError,
     NoPageError,
     PageSizeTooBig,
+    
     NotSourceError,
 }
 

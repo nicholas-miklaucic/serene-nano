@@ -686,7 +686,7 @@ impl EventHandler for Handler {
 
                             if let Some(CommandDataOptionValue::String(source))= mess{
 
-                                if let Ok(im) = typst_main::render(TYPST_BASE.clone(), source){
+                                if let Ok(im) = typst_main::render(TYPST_BASE.clone(), source.as_str()){
                                     msg.content(
                                         format!("```\n{}\n```", source)
                                     ).add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into() })
@@ -708,9 +708,9 @@ impl EventHandler for Handler {
                                 .and_then(|x| x.resolved.as_ref());
 
                             if let Some(CommandDataOptionValue::String(source))= mess{
-                                let source_with_limiters = format!("${}$", source);
+                                let source_with_limiters = format!("$\n{}\n$", source);
 
-                                if let Ok(im) = typst_main::render(TYPST_BASE.clone(), &source_with_limiters ){
+                                if let Ok(im) = typst_main::render(TYPST_BASE.clone(), source_with_limiters.as_str()){
                                     msg.content(
                                         format!("```\n{}\n```", source)
                                     ).add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into() })
