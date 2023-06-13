@@ -35,6 +35,7 @@ use serenity::{
 };
 use serenity_additions::RegisterAdditions;
 use serenity::model::channel::AttachmentType;
+use typst_base::RenderErrors;
 use weather::WeatherResponse;
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::E;
@@ -133,7 +134,7 @@ impl EventHandler for Handler {
                 .create_application_command(|command| {
                     command
                         .name("typst_equation")
-                        .description("Renders using typst")
+                        .description("Renders equations using typst")
                         .create_option(|option| {
                             option
                                 .name("code")
@@ -685,16 +686,23 @@ impl EventHandler for Handler {
                                 .and_then(|x| x.resolved.as_ref());
 
                             if let Some(CommandDataOptionValue::String(source))= mess{
-
-                                if let Ok(im) = typst_main::render(TYPST_BASE.clone(), source.as_str()){
-                                    msg.content(
+                                match typst_main::render(TYPST_BASE.clone(), source.as_str()) {
+                                    Ok(im)=>{   msg.content(
                                         format!("```\n{}\n```", source)
                                     ).add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into() })
-                                }else{
-                                     msg.content(
-                                        format!("```\n{}\n```\nAn error occurred...", source)
-                                    )
+                                },
+                                    Err(e)=>{msg.content(
+                                        format!("```\n{}\n```\n{}", source, e))},
                                 }
+                                // if let Ok(im) = typst_main::render(TYPST_BASE.clone(), source.as_str()){
+                                    // msg.content(
+                                        // format!("```\n{}\n```", source)
+                                    // ).add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into() })
+                                // }else{
+                                //      msg.content(
+                                //         format!("```\n{}\n```\nAn error occurred...", source)
+                                //     )
+                                // }
                             }else{
                                 msg.content("Bigger oopsie")
                             }
@@ -710,14 +718,13 @@ impl EventHandler for Handler {
                             if let Some(CommandDataOptionValue::String(source))= mess{
                                 let source_with_limiters = format!("$\n{}\n$", source);
 
-                                if let Ok(im) = typst_main::render(TYPST_BASE.clone(), source_with_limiters.as_str()){
-                                    msg.content(
+                                match typst_main::render(TYPST_BASE.clone(), source_with_limiters.as_str()) {
+                                    Ok(im)=>{   msg.content(
                                         format!("```\n{}\n```", source)
                                     ).add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into() })
-                                }else{
-                                     msg.content(
-                                        format!("```\n{}\n```\nAn error occurred...", source)
-                                    )
+                                },
+                                    Err(e)=>{msg.content(
+                                        format!("```\n{}\n```\n{}", source, e))},
                                 }
                             }else{
                                 msg.content("Bigger oopsie")

@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::convert::TryInto;
 use typst::util::Buffer;
 use typst::font::{Font, FontBook};
+use typst::diag::SourceError;
 use typst::syntax::{Source, SourceId};
 use typst::eval::Library;
 use typst::geom::Size;
@@ -27,6 +28,7 @@ impl Preamble for PageSize {
 enum Theme{
     Dark, Light
 }
+
 
 impl Preamble for Theme {
     fn preamble(&self)->String {
@@ -158,7 +160,7 @@ impl typst::World for ToCompile {
 }
 
 pub(crate) enum RenderErrors {
-    SourceError,
+    SourceError(Box<Vec<SourceError>>),
     NoPageError,
     PageSizeTooBig,
     

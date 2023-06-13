@@ -19,7 +19,7 @@ pub(crate) fn render(
     
     source.insert_str(0, typst_base.preamble().as_str());
     let to_compile = ToCompile::new(typst_base, source.clone());
-    let document = typst::compile(&to_compile).map_err(|_| RenderErrors::SourceError)?;
+    let document = typst::compile(&to_compile).map_err(|err| RenderErrors::SourceError(err))?;
 
     let frame = document.pages.get(0).ok_or(RenderErrors::NoPageError)?;
 
@@ -45,3 +45,21 @@ pub(crate) fn render(
     return Ok(image);
 }
 
+impl std::fmt::Display for RenderErrors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+           RenderErrors::NoPageError=>{
+                write!(f, "No pages found...")
+           }, 
+           RenderErrors::NotSourceError=>{
+            write!(f, "unreachable")
+           }
+           RenderErrors::PageSizeTooBig=>{
+            write!(f, "Page too big...")
+           }
+           RenderErrors::SourceError(err)=>{
+                write!(f, "{}", err.iter().fold(String::from("Syntax error(s):\n"), |acc, se| acc + se.message.as_str() + "\n"))
+           }
+        }
+    }
+}
