@@ -1,3 +1,5 @@
+use std::cell::{RefCell};
+use std::sync::RwLock;
 use std::sync::Arc;
 use std::convert::TryInto;
 use typst::util::Buffer;
@@ -13,7 +15,8 @@ pub(crate)trait Preamble{
 }
 
 //TODO, allow changing the customisation
-enum PageSize{
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum PageSize{
     Default, Auto
 }
 
@@ -25,7 +28,9 @@ impl Preamble for PageSize {
         }
     }
 }
-enum Theme{
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Theme{
     Dark, Light
 }
 
@@ -38,11 +43,20 @@ impl Preamble for Theme {
         }
     }
 }
-
+#[derive(Debug,Clone, Copy)]
 pub(crate)struct CustomisePage{
-    page_size: PageSize,
-    theme: Theme
+   pub(crate) page_size: PageSize,
+   pub(crate) theme: Theme
 }
+
+impl CustomisePage {
+    fn change(&mut self, other: CustomisePage){
+        //TODO wtf, how do i do this without memory crimes?!
+        self.page_size = other.page_size;
+        self.theme = other.theme;
+    }
+}
+
 
 impl Preamble for CustomisePage {
     fn preamble(&self)->String {
@@ -54,7 +68,7 @@ pub(crate) struct TypstEssentials {
     library: Prehashed<Library>,
     fontbook: Prehashed<FontBook>,
     fonts: Vec<Font>,
-    choices: CustomisePage   
+    choices: RwLock<CustomisePage> 
 }
 
 fn get_fonts() -> Vec<Font> {
@@ -79,14 +93,22 @@ impl TypstEssentials {
             fonts,
             choices: CustomisePage { 
                 page_size: PageSize::Auto, theme: Theme::Dark 
-            }
+            }.into()
         }
+    }
+
+    pub(crate) fn customise(&self, new_themes: CustomisePage){
+        self.choices.write().unwrap().change(new_themes)
+    }
+
+    pub(crate) fn get_choices(&self)-> CustomisePage{
+        self.choices.read().unwrap().clone()
     }
 }
 
 impl Preamble for TypstEssentials {
     fn preamble(&self)->String {
-        self.choices.preamble()
+        self.choices.read().unwrap().preamble()
     }
 }
 

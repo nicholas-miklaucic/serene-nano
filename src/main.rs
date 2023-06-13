@@ -35,7 +35,7 @@ use serenity::{
 };
 use serenity_additions::RegisterAdditions;
 use serenity::model::channel::AttachmentType;
-use typst_base::RenderErrors;
+use typst_base::{RenderErrors, CustomisePage};
 use weather::WeatherResponse;
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::E;
@@ -166,6 +166,25 @@ impl EventHandler for Handler {
                     }
 
                     cmd
+                })
+                .create_application_command(|command|{
+                    command
+                        .name("change_typst_theme")
+                        .description("Change the theme for typst rendering")
+                        .create_option(|option|{
+                            option
+                                .name("theme")
+                                .description("Dark/Light")
+                                .kind(CommandOptionType::Integer)
+                                .required(false)
+                        })
+                        .create_option(|option|{
+                            option
+                                .name("page_size")
+                                .description("Auto/Default")
+                                .kind(CommandOptionType::Integer)
+                                .required(false)
+                        })
                 })
                 .create_application_command(|command| {
                     let mut cmd = command
@@ -694,15 +713,6 @@ impl EventHandler for Handler {
                                     Err(e)=>{msg.content(
                                         format!("```\n{}\n```\n{}", source, e))},
                                 }
-                                // if let Ok(im) = typst_main::render(TYPST_BASE.clone(), source.as_str()){
-                                    // msg.content(
-                                        // format!("```\n{}\n```", source)
-                                    // ).add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into() })
-                                // }else{
-                                //      msg.content(
-                                //         format!("```\n{}\n```\nAn error occurred...", source)
-                                //     )
-                                // }
                             }else{
                                 msg.content("Bigger oopsie")
                             }
@@ -729,7 +739,46 @@ impl EventHandler for Handler {
                             }else{
                                 msg.content("Bigger oopsie")
                             }
-                            
+                            }
+                            "change_typst_theme"=>{
+                                let mut new_theme = TYPST_BASE.get_choices();
+                                let mut flag = false;
+                                for el in &command.data.options{
+                                    match (el.name.as_str(), el.resolved.as_ref()) {
+                                        ("theme", Some(CommandDataOptionValue::Integer(0)))=> {
+                                            new_theme.theme = typst_base::Theme::Dark;
+                                        },
+                                        ("theme", Some(CommandDataOptionValue::Integer(1)))=> {
+                                            new_theme.theme = typst_base::Theme::Light;
+                                        },
+                                        ("theme", Some(CommandDataOptionValue::Integer(_)))=> {
+                                            msg.content("Select 0 or 1 for theme..."); //TODO change this later
+                                            flag=true;
+                                        },
+                                        // //TODO Do I really need to be able to change pagesize?
+                                        // ("page_size", Some(CommandDataOptionValue::Integer(0)))=> {
+                                        //     new_theme.page_size = typst_base::PageSize::Auto;
+                                        // },
+                                        // ("page_size", Some(CommandDataOptionValue::Integer(1)))=> {
+                                        //     new_theme.page_size = typst_base::PageSize::Default;
+                                        // },
+                                        // ("page_size", Some(CommandDataOptionValue::Integer(_)))=> {
+                                        //     msg.content("Select 0 or 1 for pase size...");
+                                        //     flag= true;
+                                        // },
+                                        (_,_) =>{
+                                            msg.content("Some error happened...");
+                                            flag= true;
+                                        }
+                                    }
+                                }
+                                TYPST_BASE.customise(new_theme);
+                                if flag{
+                                    msg.content("Some error has occured...")
+                                }
+                                else{
+                                    msg.content("Changed the theme!")
+                                }
                             }
                             _ => msg.content("Drawing a blank...".to_string()),
                         })
