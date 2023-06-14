@@ -9,6 +9,9 @@ mod trace_moe;
 mod translate;
 mod utils;
 mod weather;
+mod typst_base;
+mod typst_main;
+
 
 use crate::utils::log_err;
 use command_responder::{CommandResponder, StringContent};
@@ -31,10 +34,16 @@ use serenity::{
     utils::{content_safe, Color, ContentSafeOptions, MessageBuilder},
 };
 use serenity_additions::RegisterAdditions;
+use serenity::model::channel::AttachmentType;
+use typst_base::{RenderErrors, CustomisePage};
+use weather::WeatherResponse;
 use std::collections::{HashMap, HashSet};
+use std::f32::consts::E;
 use std::io::{BufRead, BufReader};
+use std::sync::Arc;
 use std::{env, fs::File};
 use translate::detection::detect_language;
+use once_cell::sync::Lazy;
 
 #[macro_use]
 extern crate partial_application;
@@ -54,6 +63,8 @@ use serenity::{
 use crate::weather::{get_weather_forecast_from_loc, weather_forecast_msg, UnitSystem};
 
 struct Handler;
+static TYPST_BASE:Lazy<Arc<typst_base::TypstEssentials>> =  Lazy::new(|| Arc::new(typst_base::TypstEssentials::new()));
+
 
 #[async_trait]
 impl EventHandler for Handler {
@@ -96,6 +107,42 @@ impl EventHandler for Handler {
                                 .required(true)
                         })
                 })
+               .create_application_command(|command| {
+                    command
+                        .name("lorem")
+                        .description("Lorem ipsum!")
+                        .create_option(|option| {
+                            option
+                                .name("number")
+                                .description("Number of random words")
+                                .kind(CommandOptionType::Integer)
+                                .required(true)
+                        })
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("typst_render")
+                        .description("Renders using typst")
+                        .create_option(|option| {
+                            option
+                                .name("code")
+                                .description("Equation to render")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("typst_equation")
+                        .description("Renders equations using typst")
+                        .create_option(|option| {
+                            option
+                                .name("code")
+                                .description("Equation to render")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                })
                 .create_application_command(|command| {
                     let mut cmd = command
                         .name("add_elements")
@@ -119,6 +166,25 @@ impl EventHandler for Handler {
                     }
 
                     cmd
+                })
+                .create_application_command(|command|{
+                    command
+                        .name("change_typst_theme")
+                        .description("Change the theme for typst rendering")
+                        .create_option(|option|{
+                            option
+                                .name("theme")
+                                .description("Dark/Light")
+                                .kind(CommandOptionType::Integer)
+                                .required(false)
+                        })
+                        .create_option(|option|{
+                            option
+                                .name("page_size")
+                                .description("Auto/Default")
+                                .kind(CommandOptionType::Integer)
+                                .required(false)
+                        })
                 })
                 .create_application_command(|command| {
                     let mut cmd = command
@@ -416,7 +482,8 @@ impl EventHandler for Handler {
                 .create_interaction_response(&ctx.http, |response| {
                     response
                         .kind(InteractionResponseType::ChannelMessageWithSource)
-                        .interaction_response_data(|msg| match command.data.name.as_str() {
+                        .interaction_response_data(|msg| 
+                            match command.data.name.as_str() {
                             "ping" => msg.content("Pong!"),
                             "Source Anime GIFs" => {
                                 match command.data.target() {
@@ -607,6 +674,110 @@ impl EventHandler for Handler {
                                     }
                                 } else {
                                     msg.content("Something went wrong...".to_string())
+                                }
+                            }
+                            "lorem" => {
+                                let mess = command
+                                .data
+                                .options
+                                .get(0)
+                                .and_then(|x| x.resolved.as_ref());
+                            
+
+                            if let Some(CommandDataOptionValue::Integer(n))= mess{
+                                if *n<=0{
+                                    msg.content(typst_main::my_lorem(10))
+                                }else{
+                                    msg.content(typst_main::my_lorem(*n as usize))
+                                    // .add_file(AttachmentType::Bytes { data: Cow::from(vec![1,2,3]), filename: "what.jpg".into() })
+
+                                }
+                            }
+                            else {
+                                msg.content("oopsie")
+                            }
+                            },
+                            "typst_render"=>{
+                                let mess = command
+                                .data
+                                .options
+                                .get(0)
+                                .and_then(|x| x.resolved.as_ref());
+
+                            if let Some(CommandDataOptionValue::String(source))= mess{
+                                match typst_main::render(TYPST_BASE.clone(), source.as_str()) {
+                                    Ok(im)=>{   msg.content(
+                                        format!("```\n{}\n```", source)
+                                    ).add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into() })
+                                },
+                                    Err(e)=>{msg.content(
+                                        format!("```\n{}\n```\n{}", source, e))},
+                                }
+                            }else{
+                                msg.content("Bigger oopsie")
+                            }
+                            
+                            },
+                            "typst_equation"=>{
+                                let mess = command
+                                .data
+                                .options
+                                .get(0)
+                                .and_then(|x| x.resolved.as_ref());
+
+                            if let Some(CommandDataOptionValue::String(source))= mess{
+                                let source_with_limiters = format!("$\n{}\n$", source);
+
+                                match typst_main::render(TYPST_BASE.clone(), source_with_limiters.as_str()) {
+                                    Ok(im)=>{   msg.content(
+                                        format!("```\n{}\n```", source)
+                                    ).add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into() })
+                                },
+                                    Err(e)=>{msg.content(
+                                        format!("```\n{}\n```\n{}", source, e))},
+                                }
+                            }else{
+                                msg.content("Bigger oopsie")
+                            }
+                            }
+                            "change_typst_theme"=>{
+                                let mut new_theme = TYPST_BASE.get_choices();
+                                let mut flag = false;
+                                for el in &command.data.options{
+                                    match (el.name.as_str(), el.resolved.as_ref()) {
+                                        ("theme", Some(CommandDataOptionValue::Integer(0)))=> {
+                                            new_theme.theme = typst_base::Theme::Dark;
+                                        },
+                                        ("theme", Some(CommandDataOptionValue::Integer(1)))=> {
+                                            new_theme.theme = typst_base::Theme::Light;
+                                        },
+                                        ("theme", Some(CommandDataOptionValue::Integer(_)))=> {
+                                            msg.content("Select 0 or 1 for theme..."); //TODO change this later
+                                            flag=true;
+                                        },
+                                        // //TODO Do I really need to be able to change pagesize?
+                                        // ("page_size", Some(CommandDataOptionValue::Integer(0)))=> {
+                                        //     new_theme.page_size = typst_base::PageSize::Auto;
+                                        // },
+                                        // ("page_size", Some(CommandDataOptionValue::Integer(1)))=> {
+                                        //     new_theme.page_size = typst_base::PageSize::Default;
+                                        // },
+                                        // ("page_size", Some(CommandDataOptionValue::Integer(_)))=> {
+                                        //     msg.content("Select 0 or 1 for pase size...");
+                                        //     flag= true;
+                                        // },
+                                        (_,_) =>{
+                                            msg.content("Some error happened...");
+                                            flag= true;
+                                        }
+                                    }
+                                }
+                                TYPST_BASE.customise(new_theme);
+                                if flag{
+                                    msg.content("Some error has occured...")
+                                }
+                                else{
+                                    msg.content("Changed the theme!")
                                 }
                             }
                             _ => msg.content("Drawing a blank...".to_string()),
@@ -889,6 +1060,7 @@ async fn ask(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
 
 #[tokio::main]
 async fn main() {
+
     // Configure the client with your Discord bot token in the environment.
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
 
