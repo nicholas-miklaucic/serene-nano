@@ -7,21 +7,22 @@ mod rep;
 mod set;
 mod trace_moe;
 mod translate;
-mod utils;
-mod weather;
 mod typst_base;
 mod typst_main;
-
+mod utils;
+mod weather;
 
 use crate::utils::log_err;
 use command_responder::{CommandResponder, StringContent};
 use geolocation::find_location;
 use lingua::Language;
 
+use once_cell::sync::Lazy;
 use rand::Rng;
 use rand::{self, prelude::IteratorRandom};
 use regex::Regex;
 use serenity::model::application::interaction::InteractionResponseType;
+use serenity::model::channel::AttachmentType;
 use serenity::model::prelude::command::{Command, CommandOptionType};
 use serenity::model::prelude::interaction::application_command::{
     CommandDataOptionValue, ResolvedTarget,
@@ -34,16 +35,15 @@ use serenity::{
     utils::{content_safe, Color, ContentSafeOptions, MessageBuilder},
 };
 use serenity_additions::RegisterAdditions;
-use serenity::model::channel::AttachmentType;
-use typst_base::{RenderErrors, CustomisePage};
-use weather::WeatherResponse;
+use typst_main::catch_typst_message;
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::E;
 use std::io::{BufRead, BufReader};
 use std::sync::Arc;
 use std::{env, fs::File};
 use translate::detection::detect_language;
-use once_cell::sync::Lazy;
+use typst_base::{CustomisePage, RenderErrors};
+use weather::WeatherResponse;
 
 #[macro_use]
 extern crate partial_application;
@@ -63,8 +63,8 @@ use serenity::{
 use crate::weather::{get_weather_forecast_from_loc, weather_forecast_msg, UnitSystem};
 
 struct Handler;
-static TYPST_BASE:Lazy<Arc<typst_base::TypstEssentials>> =  Lazy::new(|| Arc::new(typst_base::TypstEssentials::new()));
-
+static TYPST_BASE: Lazy<Arc<typst_base::TypstEssentials>> =
+    Lazy::new(|| Arc::new(typst_base::TypstEssentials::new()));
 
 #[async_trait]
 impl EventHandler for Handler {
@@ -107,7 +107,7 @@ impl EventHandler for Handler {
                                 .required(true)
                         })
                 })
-               .create_application_command(|command| {
+                .create_application_command(|command| {
                     command
                         .name("lorem")
                         .description("Lorem ipsum!")
@@ -167,18 +167,20 @@ impl EventHandler for Handler {
 
                     cmd
                 })
-                .create_application_command(|command|{
+                .create_application_command(|command| {
                     command
                         .name("change_typst_theme")
-                        .description("Change the theme for typst rendering")
-                        .create_option(|option|{
+                        .description("Change how rendered Typst looks")
+                        .create_option(|option| {
                             option
                                 .name("theme")
-                                .description("Dark/Light")
-                                .kind(CommandOptionType::Integer)
+                                .description("Color theme for Typst rendering")
+                                .kind(CommandOptionType::String)
+                                .add_string_choice("dark", "dark")
+                                .add_string_choice("light", "light")
                                 .required(false)
                         })
-                        .create_option(|option|{
+                        .create_option(|option| {
                             option
                                 .name("page_size")
                                 .description("Auto/Default")
@@ -379,7 +381,19 @@ impl EventHandler for Handler {
                         .await,
                 );
             }
-        } else if !&_new_message
+        } else if let Some(typst_src) = catch_typst_message(&_new_message.content) {
+            match typst_main::render(TYPST_BASE.clone(), typst_src.as_str()) {
+                Ok(im)=>{&_new_message.channel_id.send_message(_ctx.http, |m| {
+                    m.add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into()})
+                }).await;
+                },
+                Err(e)=>{&_new_message.channel_id.send_message(_ctx.http, |m| {
+                    m.content(format!("```\n{}\n```\n{}", typst_src, e))
+                }).await;
+                }
+            };
+        }
+        else if !&_new_message
             .content
             .starts_with(&env::var("PREFIX").unwrap_or_else(|_| "nano, ".to_string()))
         {
@@ -440,6 +454,23 @@ impl EventHandler for Handler {
                             None => "Error translating :(".to_string(),
                         }
                     }
+                },
+                "change_typst_theme" => {
+                    // parse arguments
+                    let mut new_theme = TYPST_BASE.get_choices();
+                    for opt in &command.data.options {
+                        if let Some(serde_json::Value::String(s)) = &opt.value {
+                            if opt.name.as_str() == "theme" {
+                                new_theme.theme = match s.as_ref() {
+                                    "dark" => typst_base::Theme::Dark,
+                                    "light" => typst_base::Theme::Light,
+                                    _ => new_theme.theme,
+                                }
+                            }
+                        }
+                    }
+                    TYPST_BASE.customise(new_theme);
+                    "Customized theme!".to_string()
                 }
                 _ => "".to_string(),
             };
@@ -482,7 +513,7 @@ impl EventHandler for Handler {
                 .create_interaction_response(&ctx.http, |response| {
                     response
                         .kind(InteractionResponseType::ChannelMessageWithSource)
-                        .interaction_response_data(|msg| 
+                        .interaction_response_data(|msg|
                             match command.data.name.as_str() {
                             "ping" => msg.content("Pong!"),
                             "Source Anime GIFs" => {
@@ -716,8 +747,10 @@ impl EventHandler for Handler {
                             }else{
                                 msg.content("Bigger oopsie")
                             }
-                            
                             },
+                                "change_typst_theme" => {
+                                    msg.content("Changed theme!")
+                                },
                             "typst_equation"=>{
                                 let mess = command
                                 .data
@@ -739,46 +772,6 @@ impl EventHandler for Handler {
                             }else{
                                 msg.content("Bigger oopsie")
                             }
-                            }
-                            "change_typst_theme"=>{
-                                let mut new_theme = TYPST_BASE.get_choices();
-                                let mut flag = false;
-                                for el in &command.data.options{
-                                    match (el.name.as_str(), el.resolved.as_ref()) {
-                                        ("theme", Some(CommandDataOptionValue::Integer(0)))=> {
-                                            new_theme.theme = typst_base::Theme::Dark;
-                                        },
-                                        ("theme", Some(CommandDataOptionValue::Integer(1)))=> {
-                                            new_theme.theme = typst_base::Theme::Light;
-                                        },
-                                        ("theme", Some(CommandDataOptionValue::Integer(_)))=> {
-                                            msg.content("Select 0 or 1 for theme..."); //TODO change this later
-                                            flag=true;
-                                        },
-                                        // //TODO Do I really need to be able to change pagesize?
-                                        // ("page_size", Some(CommandDataOptionValue::Integer(0)))=> {
-                                        //     new_theme.page_size = typst_base::PageSize::Auto;
-                                        // },
-                                        // ("page_size", Some(CommandDataOptionValue::Integer(1)))=> {
-                                        //     new_theme.page_size = typst_base::PageSize::Default;
-                                        // },
-                                        // ("page_size", Some(CommandDataOptionValue::Integer(_)))=> {
-                                        //     msg.content("Select 0 or 1 for pase size...");
-                                        //     flag= true;
-                                        // },
-                                        (_,_) =>{
-                                            msg.content("Some error happened...");
-                                            flag= true;
-                                        }
-                                    }
-                                }
-                                TYPST_BASE.customise(new_theme);
-                                if flag{
-                                    msg.content("Some error has occured...")
-                                }
-                                else{
-                                    msg.content("Changed the theme!")
-                                }
                             }
                             _ => msg.content("Drawing a blank...".to_string()),
                         })
@@ -1060,7 +1053,6 @@ async fn ask(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
 
 #[tokio::main]
 async fn main() {
-
     // Configure the client with your Discord bot token in the environment.
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
 

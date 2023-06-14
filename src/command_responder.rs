@@ -5,8 +5,6 @@ use serenity::{
     model::application::interaction::application_command::ApplicationCommandInteraction,
 };
 
-
-
 pub(crate) trait CommandResponder: Sync + Send {
     /// Responds to a command.
     fn response<'a, 'b>(
