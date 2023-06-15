@@ -1,65 +1,72 @@
-use std::cell::{RefCell};
-use std::sync::RwLock;
-use std::sync::Arc;
-use std::convert::TryInto;
-use typst::util::Buffer;
-use typst::font::{Font, FontBook};
-use typst::diag::SourceError;
-use typst::syntax::{Source, SourceId};
-use typst::eval::Library;
-use typst::geom::Size;
 use comemo::Prehashed;
+use std::cell::RefCell;
+use std::convert::TryInto;
+use std::sync::Arc;
+use std::sync::RwLock;
+use typst::diag::SourceError;
+use typst::eval::Library;
+use typst::font::{Font, FontBook};
+use typst::geom::Size;
+use typst::syntax::{Source, SourceId};
+use typst::util::Buffer;
 
-pub(crate)trait Preamble{
-    fn preamble(&self)->String;
+pub(crate) trait Preamble {
+    fn preamble(&self) -> String;
 }
 
 //TODO, allow changing the customisation
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum PageSize{
-    Default, Auto
+pub(crate) enum PageSize {
+    Default,
+    Auto,
 }
 
 impl Preamble for PageSize {
-    fn preamble(&self)->String {
+    fn preamble(&self) -> String {
         match &self {
-            PageSize::Auto=>  "#set page(width: auto, height: auto, margin: 10pt)\n".to_string(),
-            PageSize::Default => "".to_string()
+            PageSize::Auto => "#set page(width: auto, height: auto, margin: 10pt)\n".to_string(),
+            PageSize::Default => "".to_string(),
         }
     }
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum Theme{
-    Dark, Light
+pub(crate) enum Theme {
+    Dark,
+    Light,
 }
 
-
 impl Preamble for Theme {
-    fn preamble(&self)->String {
+    fn preamble(&self) -> String {
         match self {
-            Theme::Light=>"#set page(fill: white)\n".to_string(),
-            Theme::Dark=> "#set page(fill: rgb(49, 51, 56))\n#set text(fill: rgb(219, 222, 225))\n".to_string(),
+            Theme::Light => "
+#let bg = rgb(219, 222, 225)
+#let fg = rgb(49, 51, 56)
+"
+            .to_string(),
+            Theme::Dark => "
+#let fg = rgb(219, 222, 225)
+#let bg = rgb(49, 51, 56)"
+                .to_string(),
         }
     }
 }
-#[derive(Debug,Clone, Copy)]
-pub(crate)struct CustomisePage{
-   pub(crate) page_size: PageSize,
-   pub(crate) theme: Theme
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CustomisePage {
+    pub(crate) page_size: PageSize,
+    pub(crate) theme: Theme,
 }
 
 impl CustomisePage {
-    fn change(&mut self, other: CustomisePage){
+    fn change(&mut self, other: CustomisePage) {
         //TODO wtf, how do i do this without memory crimes?!
         self.page_size = other.page_size;
         self.theme = other.theme;
     }
 }
 
-
 impl Preamble for CustomisePage {
-    fn preamble(&self)->String {
+    fn preamble(&self) -> String {
         self.page_size.preamble() + self.theme.preamble().as_str()
     }
 }
@@ -68,7 +75,7 @@ pub(crate) struct TypstEssentials {
     library: Prehashed<Library>,
     fontbook: Prehashed<FontBook>,
     fonts: Vec<Font>,
-    choices: RwLock<CustomisePage> 
+    choices: RwLock<CustomisePage>,
 }
 
 fn get_fonts() -> Vec<Font> {
@@ -91,30 +98,73 @@ impl TypstEssentials {
             library: Prehashed::new(typst_library::build()),
             fontbook: Prehashed::new(FontBook::from_fonts(&fonts)),
             fonts,
-            choices: CustomisePage { 
-                page_size: PageSize::Auto, theme: Theme::Dark 
-            }.into()
+            choices: CustomisePage {
+                page_size: PageSize::Auto,
+                theme: Theme::Dark,
+            }
+            .into(),
         }
     }
 
-    pub(crate) fn customise(&self, new_themes: CustomisePage){
+    pub(crate) fn customise(&self, new_themes: CustomisePage) {
         self.choices.write().unwrap().change(new_themes)
     }
 
-    pub(crate) fn get_choices(&self)-> CustomisePage{
+    pub(crate) fn get_choices(&self) -> CustomisePage {
         self.choices.read().unwrap().clone()
     }
 }
 
 impl Preamble for TypstEssentials {
-    fn preamble(&self)->String {
+    fn preamble(&self) -> String {
         self.choices.read().unwrap().preamble()
+            + "
+#set text(
+  font: (
+    \"EB Garamond 12\",
+    \"DejaVu Sans Mono\"
+  ),
+  size: 18pt,
+  number-type: \"lining\",
+  number-width: \"tabular\",
+  weight: \"regular\",
+);
+// set a size that more closely approximates the zoom-in on Discord
+
+
+// Preamble starts here
+
+#set page(
+  fill: bg
+)
+#set text(
+  fill: fg,
+)
+
+#let infty = [#sym.infinity];
+
+#let dx = [#math.dif x];
+#let dy = [#math.dif y];
+#let dz = [#math.dif z];
+
+#let int = [#sym.integral]
+#let infty = [#sym.infinity]
+
+#let mathbox(content) = {
+  style(styles => {
+    let size = measure(content, styles);
+      block(
+        radius: 0.2em,
+        stroke: fg,
+        inset: size.height / 1.5,
+        content)})
+};"
     }
 }
 
-const DESIRED_RESOLUTION: f32 = 1000.0;
+const DESIRED_RESOLUTION: f32 = 2000.0;
 const MAX_SIZE: f32 = 10000.0;
-const MAX_PIXELS_PER_POINT: f32 = 5.0;
+const MAX_PIXELS_PER_POINT: f32 = 15.0;
 
 pub(crate) fn determine_pixels_per_point(size: Size) -> Result<f32, RenderErrors> {
     let x = size.x.to_pt() as f32;
@@ -128,7 +178,7 @@ pub(crate) fn determine_pixels_per_point(size: Size) -> Result<f32, RenderErrors
     }
 }
 
-pub(crate)struct ToCompile {
+pub(crate) struct ToCompile {
     typst_essentials: Arc<TypstEssentials>,
     source: Source,
     time: time::OffsetDateTime,
@@ -139,9 +189,9 @@ fn string2source(source: String) -> Source {
 }
 
 impl ToCompile {
-    pub(crate)fn new(te: Arc<TypstEssentials>, source: String) -> Self {
+    pub(crate) fn new(te: Arc<TypstEssentials>, source: String) -> Self {
         ToCompile {
-            typst_essentials:te,
+            typst_essentials: te,
             source: string2source(source),
             time: time::OffsetDateTime::now_utc(),
         }
@@ -185,7 +235,5 @@ pub(crate) enum RenderErrors {
     SourceError(Box<Vec<SourceError>>),
     NoPageError,
     PageSizeTooBig,
-    
     NotSourceError,
 }
-

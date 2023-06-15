@@ -1,6 +1,5 @@
 //! API wrapper for OpenMeteo geolocation.
 
-
 use serde::{Deserialize, Serialize};
 
 /// Geolocation API result. (Does not include every field.)
