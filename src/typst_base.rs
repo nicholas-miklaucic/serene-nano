@@ -1,5 +1,4 @@
 use comemo::Prehashed;
-use std::cell::RefCell;
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::sync::RwLock;

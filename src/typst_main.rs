@@ -5,6 +5,8 @@ use std::sync::Arc;
 use typst::geom::RgbaColor;
 use typst_library::text::lorem;
 
+use typst::syntax::ErrorPos;
+
 use crate::typst_base::{
     determine_pixels_per_point, Preamble, RenderErrors, ToCompile, TypstEssentials,
 };

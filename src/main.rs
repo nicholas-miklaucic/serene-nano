@@ -35,7 +35,6 @@ use serenity::{
     utils::{content_safe, Color, ContentSafeOptions, MessageBuilder},
 };
 use serenity_additions::RegisterAdditions;
-use typst_main::catch_typst_message;
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::E;
 use std::io::{BufRead, BufReader};
@@ -43,6 +42,7 @@ use std::sync::Arc;
 use std::{env, fs::File};
 use translate::detection::detect_language;
 use typst_base::{CustomisePage, RenderErrors};
+use typst_main::catch_typst_message;
 use weather::WeatherResponse;
 
 #[macro_use]
@@ -65,6 +65,60 @@ use crate::weather::{get_weather_forecast_from_loc, weather_forecast_msg, UnitSy
 struct Handler;
 static TYPST_BASE: Lazy<Arc<typst_base::TypstEssentials>> =
     Lazy::new(|| Arc::new(typst_base::TypstEssentials::new()));
+
+enum MessageTypes {
+    BotMessage,
+    Thank,
+    GoodNano,
+    BadNano,
+    Typst(String),
+    Translate(Language),
+    Normal,
+}
+
+async fn get_message_type(message: &Message, ctx: &Context) -> MessageTypes {
+    if message.author.bot {
+        return MessageTypes::BotMessage;
+    }
+
+    if !message.mentions.is_empty() {
+        let thank_re = Regex::new(r"(?i)(than[kx])|(tysm)|(^ty)|(\s+ty\s+)").unwrap();
+        if thank_re.is_match(&message.content) {
+            return MessageTypes::Thank;
+        }
+
+        if message.mentions_me(ctx).await.unwrap_or(false) {
+            let bad_re = Regex::new(r"(?i)(bad)").unwrap();
+            if bad_re.is_match(&message.content) {
+                return MessageTypes::BadNano;
+            }
+
+            let good_re =
+                Regex::new(r"(?i)(good bot)|(good job)|(nice work)|(nailed it)|(nice job)")
+                    .unwrap();
+            if good_re.is_match(&message.content) {
+                return MessageTypes::GoodNano;
+            }
+        }
+    }
+
+    if let Some(s) = catch_typst_message(&message.content) {
+        return MessageTypes::Typst(s);
+    }
+
+    //Translating has to be the last MessageTypes arm;
+    if message
+        .content
+        .starts_with(&env::var("PREFIX").unwrap_or_else(|_| "nano, ".to_string()))
+    {
+        match detect_language(&message.content) {
+            Some(Language::English) | None => MessageTypes::Normal,
+            Some(other) => MessageTypes::Translate(other),
+        }
+    } else {
+        MessageTypes::Normal
+    }
+}
 
 #[async_trait]
 impl EventHandler for Handler {
@@ -344,32 +398,14 @@ impl EventHandler for Handler {
     }
 
     async fn message(&self, _ctx: Context, _new_message: Message) {
-        // very important! this avoids infinite loops and whatnot
-        if _new_message.author.bot {
-            return;
-        }
-        let thank_re = Regex::new(r"(?i)(than[kx])|(tysm)|(^ty)|(\s+ty\s+)").unwrap();
-        if thank_re.is_match(&_new_message.content) && !_new_message.mentions.is_empty() {
-            if let Err(err) = rep::thank(&_ctx, &_new_message).await {
-                println!("Something went wrong! {}", err);
+        match get_message_type(&_new_message, &_ctx).await {
+            MessageTypes::Normal | MessageTypes::BotMessage => (),
+            MessageTypes::Thank => {
+                if let Err(err) = rep::thank(&_ctx, &_new_message).await {
+                    println!("Something went wrong! {}", err);
+                }
             }
-        } else if _new_message.mentions_me(&_ctx).await.unwrap_or(false) {
-            let bad_re = Regex::new(r"(?i)(bad)").unwrap();
-            let good_re =
-                Regex::new(r"(?i)(good bot)|(good job)|(nice work)|(nailed it)|(nice job)")
-                    .unwrap();
-            if bad_re.is_match(&_new_message.content) {
-                log_err(
-                    _new_message
-                        .reply(
-                            &_ctx,
-                            MessageBuilder::new()
-                                .push("https://c.tenor.com/8QjR5hC91b0AAAAC/nichijou-nano.gif")
-                                .build(),
-                        )
-                        .await,
-                );
-            } else if good_re.is_match(&_new_message.content) {
+            MessageTypes::GoodNano => {
                 log_err(
                     _new_message
                         .reply(
@@ -381,45 +417,59 @@ impl EventHandler for Handler {
                         .await,
                 );
             }
-        } else if let Some(typst_src) = catch_typst_message(&_new_message.content) {
-            match typst_main::render(TYPST_BASE.clone(), typst_src.as_str()) {
-                Ok(im)=>{&_new_message.channel_id.send_message(_ctx.http, |m| {
-                    m.add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into()})
-                }).await;
-                },
-                Err(e)=>{&_new_message.channel_id.send_message(_ctx.http, |m| {
-                    m.content(format!("```\n{}\n```\n{}", typst_src, e))
-                }).await;
-                }
-            };
-        }
-        else if !&_new_message
-            .content
-            .starts_with(&env::var("PREFIX").unwrap_or_else(|_| "nano, ".to_string()))
-        {
-            match detect_language(&_new_message.content) {
-                // only translate for non-English text detected with high probability
-                Some(Language::English) => (),
-                None => (),
-                Some(other) => {
-                    match translate::translate(
-                        &_new_message.content,
-                        Some(other),
-                        Language::English,
-                    )
-                    .await
-                    {
-                        Some(result) => {
-                            if result == _new_message.content {
-                                println!("Translation detection failed");
-                                dbg!(result.clone());
-                            } else if let Err(why) = _new_message.reply(&_ctx, result).await {
-                                println!("Error sending message: {}", why);
-                            }
+            MessageTypes::BadNano => {
+                log_err(
+                    _new_message
+                        .reply(
+                            &_ctx,
+                            MessageBuilder::new()
+                                .push("https://c.tenor.com/8QjR5hC91b0AAAAC/nichijou-nano.gif")
+                                .build(),
+                        )
+                        .await,
+                );
+            }
+            MessageTypes::Translate(other_language) => {
+                match translate::translate(
+                    &_new_message.content,
+                    Some(other_language),
+                    Language::English,
+                )
+                .await
+                {
+                    Some(result) => {
+                        if result == _new_message.content {
+                            println!("Translation detection failed");
+                            dbg!(result.clone());
+                        } else if let Err(why) = _new_message.reply(&_ctx, result).await {
+                            println!("Error sending message: {}", why);
                         }
-                        None => println!("Error translating"),
                     }
+                    None => println!("Error translating"),
                 }
+            }
+            MessageTypes::Typst(typst_src) => {
+                match typst_main::render(TYPST_BASE.clone(), typst_src.as_str()) {
+                    Ok(im) => {
+                        &_new_message
+                            .channel_id
+                            .send_message(_ctx.http, |m| {
+                                m.add_file(AttachmentType::Bytes {
+                                    data: im.into(),
+                                    filename: "Rendered.png".into(),
+                                })
+                            })
+                            .await;
+                    }
+                    Err(e) => {
+                        &_new_message
+                            .channel_id
+                            .send_message(_ctx.http, |m| {
+                                m.content(format!("```\n{}\n```\n{}", typst_src, e))
+                            })
+                            .await;
+                    }
+                };
             }
         }
     }
@@ -454,7 +504,7 @@ impl EventHandler for Handler {
                             None => "Error translating :(".to_string(),
                         }
                     }
-                },
+                }
                 "change_typst_theme" => {
                     // parse arguments
                     let mut new_theme = TYPST_BASE.get_choices();
