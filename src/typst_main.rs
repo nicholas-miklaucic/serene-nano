@@ -1,4 +1,4 @@
-use crate::command_responder::MyCommand;
+use crate::command_responder::Command;
 use crate::config::{TYPST_CLOSE_DELIM, TYPST_OPEN_DELIM};
 use regex::{escape, Regex};
 use serenity::http::multipart::Multipart;
@@ -111,25 +111,25 @@ impl std::fmt::Display for RenderErrors {
     }
 }
 
-pub(crate) struct Typst_Eqtn {
+pub(crate) struct TypstEqtn {
     base: Arc<TypstEssentials>,
 }
 
-impl Typst_Eqtn {
-    pub(crate) fn new(typst_base: Arc<TypstEssentials>) -> Typst_Eqtn {
-        Typst_Eqtn { base: typst_base }
+impl TypstEqtn {
+    pub(crate) fn new(typst_base: Arc<TypstEssentials>) -> TypstEqtn {
+        TypstEqtn { base: typst_base }
     }
 }
 
-impl MyCommand for Typst_Eqtn {
-    fn get_name(&self) -> &str {
+impl Command for TypstEqtn {
+    fn name(&self) -> &str {
         "typst_equation"
     }
-    fn get_description(&self) -> &str {
+    fn description(&self) -> &str {
         "Renders equations using typst"
     }
 
-    fn get_options(
+    fn options(
         &self,
     ) -> Vec<fn(&mut CreateApplicationCommandOption) -> &mut CreateApplicationCommandOption> {
         vec![|option: &mut CreateApplicationCommandOption| {
@@ -141,7 +141,7 @@ impl MyCommand for Typst_Eqtn {
         }]
     }
 
-    fn get_interaction<'a, 'b>(
+    fn interaction<'a, 'b>(
         &self,
         ctx: &Context,
         command: &ApplicationCommandInteraction,
@@ -173,24 +173,24 @@ impl MyCommand for Typst_Eqtn {
     }
 }
 
-pub(crate) struct Typst_Render {
+pub(crate) struct TypstRender {
     base: Arc<TypstEssentials>,
 }
 
-impl Typst_Render {
-    pub(crate) fn new(typst_base: Arc<TypstEssentials>) -> Typst_Render {
-        Typst_Render { base: typst_base }
+impl TypstRender {
+    pub(crate) fn new(typst_base: Arc<TypstEssentials>) -> TypstRender {
+        TypstRender { base: typst_base }
     }
 }
 
-impl MyCommand for Typst_Render {
-    fn get_name(&self) -> &str {
+impl Command for TypstRender {
+    fn name(&self) -> &str {
         "typst_render"
     }
-    fn get_description(&self) -> &str {
+    fn description(&self) -> &str {
         "renders with typst"
     }
-    fn get_options(
+    fn options(
         &self,
     ) -> Vec<fn(&mut CreateApplicationCommandOption) -> &mut CreateApplicationCommandOption> {
         vec![|option: &mut CreateApplicationCommandOption| {
@@ -201,7 +201,7 @@ impl MyCommand for Typst_Render {
                 .required(true)
         }]
     }
-    fn get_interaction<'a, 'b>(
+    fn interaction<'a, 'b>(
         &self,
         ctx: &Context,
         command: &ApplicationCommandInteraction,

@@ -44,22 +44,22 @@ impl CommandResponder for StringContent {
     }
 }
 
-pub trait MyCommand: Sync + Send{
-    fn get_name(&self) -> &str;
-    fn get_description(&self) -> &str;
+pub trait Command: Sync + Send{
+    fn name(&self) -> &str;
+    fn description(&self) -> &str;
     // fn get_options(&self, option: &mut CreateApplicationCommandOption)-> Vec<&mut CreateApplicationCommandOption>;
-    fn get_interaction<'a, 'b>(
+    fn interaction<'a, 'b>(
         &self,
         ctx: &Context,
         command: &ApplicationCommandInteraction,
         msg: &'a mut CreateInteractionResponseData<'b>
     ) ->&'a mut CreateInteractionResponseData<'b>;
 
-    fn get_options(
+    fn options(
         &self,
     ) -> Vec<fn(&mut CreateApplicationCommandOption) -> &mut CreateApplicationCommandOption>;
 
-    fn get_option_names(&self) -> Vec<String> {
+    fn option_names(&self) -> Vec<String> {
         //TODO: A smart way of getting the option names
         todo!()
     }

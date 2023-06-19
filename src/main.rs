@@ -13,7 +13,7 @@ mod utils;
 mod weather;
 
 use crate::utils::log_err;
-use command_responder::{CommandResponder, MyCommand, StringContent};
+use command_responder::{CommandResponder, Command, StringContent};
 use geolocation::find_location;
 use lingua::Language;
 
@@ -23,7 +23,7 @@ use rand::{self, prelude::IteratorRandom};
 use regex::Regex;
 use serenity::model::application::interaction::InteractionResponseType;
 use serenity::model::channel::AttachmentType;
-use serenity::model::prelude::command::{Command, CommandOptionType};
+use serenity::model::prelude::command::{Command as SerenityCommand, CommandOptionType};
 use serenity::model::prelude::interaction::application_command::{
     CommandDataOptionValue, ResolvedTarget,
 };
@@ -42,7 +42,7 @@ use std::sync::Arc;
 use std::{env, fs::File};
 use translate::detection::detect_language;
 use typst_base::{CustomisePage, RenderErrors};
-use typst_main::{catch_typst_message, Typst_Eqtn, Typst_Render};
+use typst_main::{catch_typst_message, TypstEqtn, TypstRender};
 use weather::WeatherResponse;
 
 #[macro_use]
@@ -62,18 +62,18 @@ use serenity::{
 
 use crate::weather::{get_weather_forecast_from_loc, weather_forecast_msg, UnitSystem};
 
-struct Handler(HashMap<String, Box<dyn MyCommand>>);
+struct Handler(HashMap<String, Box<dyn Command>>);
 
 impl Handler {
-    fn add(mut self, command: Box<dyn MyCommand>) -> Self {
-        self.0.insert(command.get_name().into(), command);
+    fn add(mut self, command: Box<dyn Command>) -> Self {
+        self.0.insert(command.name().into(), command);
         self
     }
     fn new() -> Self {
         //Add commands here
         let h = Handler(HashMap::new())
-            .add(Box::new(Typst_Eqtn::new(TYPST_BASE.clone())))
-            .add(Box::new(Typst_Render::new(TYPST_BASE.clone())));
+            .add(Box::new(TypstEqtn::new(TYPST_BASE.clone())))
+            .add(Box::new(TypstRender::new(TYPST_BASE.clone())));
 
         println!("Number of commands: {}", h.0.len());
 
@@ -149,19 +149,19 @@ impl serenity::prelude::EventHandler for Handler {
 
         ctx.set_activity(Activity::playing("with Sakamoto")).await;
 
-        let _commands = Command::set_global_application_commands(
+        let _commands =SerenityCommand::set_global_application_commands(
             &ctx.http, 
             |commands| {
                 self.0.values().fold(
                     commands, 
                     |commands_so_far, command_to_add| {
-                        println!("Adding command {}", command_to_add.get_name());
+                        println!("Adding command {}", command_to_add.name());
                         commands_so_far.create_application_command(
                             |command| {
-                                command_to_add.get_options().iter().fold(
+                                command_to_add.options().iter().fold(
                                     command
-                                        .name(command_to_add.get_name())
-                                        .description(command_to_add.get_description()),
+                                        .name(command_to_add.name())
+                                        .description(command_to_add.description()),
                                     |command_without_all_options, new_option| 
                                     command_without_all_options.create_option(new_option),
                     )
@@ -430,7 +430,7 @@ impl serenity::prelude::EventHandler for Handler {
                 "Number of actual commands is {}", _commands.unwrap().len()
             );
         }
-        println!("But the real actual numner of commands is {}", Command::get_global_application_commands(&ctx.http).await.unwrap().len())
+        println!("But the real actual numner of commands is {}",SerenityCommand::get_global_application_commands(&ctx.http).await.unwrap().len())
     }
 
     async fn message(&self, _ctx: Context, _new_message: Message) {
@@ -510,7 +510,7 @@ impl serenity::prelude::EventHandler for Handler {
                             response
                                 .kind(InteractionResponseType::ChannelMessageWithSource)
                                 .interaction_response_data(|msg| {
-                                    my_command.get_interaction(&ctx, &command, msg)
+                                    my_command.interaction(&ctx, &command, msg)
                                 })
                         })
                         .await
