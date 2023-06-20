@@ -13,7 +13,7 @@ mod utils;
 mod weather;
 
 use crate::utils::log_err;
-use command_responder::{CommandResponder, StringContent};
+use command_responder::{CommandResponder, Command, StringContent};
 use geolocation::find_location;
 use lingua::Language;
 
@@ -23,7 +23,7 @@ use rand::{self, prelude::IteratorRandom};
 use regex::Regex;
 use serenity::model::application::interaction::InteractionResponseType;
 use serenity::model::channel::AttachmentType;
-use serenity::model::prelude::command::{Command, CommandOptionType};
+use serenity::model::prelude::command::{Command as SerenityCommand, CommandOptionType};
 use serenity::model::prelude::interaction::application_command::{
     CommandDataOptionValue, ResolvedTarget,
 };
@@ -35,7 +35,6 @@ use serenity::{
     utils::{content_safe, Color, ContentSafeOptions, MessageBuilder},
 };
 use serenity_additions::RegisterAdditions;
-use typst_main::catch_typst_message;
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::E;
 use std::io::{BufRead, BufReader};
@@ -43,6 +42,7 @@ use std::sync::Arc;
 use std::{env, fs::File};
 use translate::detection::detect_language;
 use typst_base::{CustomisePage, RenderErrors};
+use typst_main::{catch_typst_message, TypstEqtn, TypstRender};
 use weather::WeatherResponse;
 
 #[macro_use]
@@ -62,314 +62,386 @@ use serenity::{
 
 use crate::weather::{get_weather_forecast_from_loc, weather_forecast_msg, UnitSystem};
 
-struct Handler;
+struct Handler(HashMap<String, Box<dyn Command>>);
+
+impl Handler {
+    fn add(mut self, command: Box<dyn Command>) -> Self {
+        self.0.insert(command.name().into(), command);
+        self
+    }
+    fn new() -> Self {
+        //Add commands here
+        let h = Handler(HashMap::new())
+            .add(Box::new(TypstEqtn::new(TYPST_BASE.clone())))
+            .add(Box::new(TypstRender::new(TYPST_BASE.clone())));
+
+        println!("Number of commands: {}", h.0.len());
+
+        h
+    }
+
+    // fn get(&self, k:String)->Option<Box<dyn MyCommand>>{
+    //     self.0.get(&k)
+    // }
+}
+
 static TYPST_BASE: Lazy<Arc<typst_base::TypstEssentials>> =
     Lazy::new(|| Arc::new(typst_base::TypstEssentials::new()));
 
+enum MessageTypes {
+    BotMessage,
+    Thank,
+    GoodNano,
+    BadNano,
+    Typst(String),
+    Translate(Language),
+    Normal,
+}
+
+async fn get_message_type(message: &Message, ctx: &Context) -> MessageTypes {
+    if message.author.bot {
+        return MessageTypes::BotMessage;
+    }
+
+    if !message.mentions.is_empty() {
+        let thank_re = Regex::new(r"(?i)(than[kx])|(tysm)|(^ty)|(\s+ty\s+)").unwrap();
+        if thank_re.is_match(&message.content) {
+            return MessageTypes::Thank;
+        }
+
+        if message.mentions_me(ctx).await.unwrap_or(false) {
+            let bad_re = Regex::new(r"(?i)(bad)").unwrap();
+            if bad_re.is_match(&message.content) {
+                return MessageTypes::BadNano;
+            }
+
+            let good_re =
+                Regex::new(r"(?i)(good bot)|(good job)|(nice work)|(nailed it)|(nice job)")
+                    .unwrap();
+            if good_re.is_match(&message.content) {
+                return MessageTypes::GoodNano;
+            }
+        }
+    }
+
+    if let Some(s) = catch_typst_message(&message.content) {
+        return MessageTypes::Typst(s);
+    }
+
+    //Translating has to be the last MessageTypes arm;
+    if message
+        .content
+        .starts_with(&env::var("PREFIX").unwrap_or_else(|_| "nano, ".to_string()))
+    {
+        match detect_language(&message.content) {
+            Some(Language::English) | None => MessageTypes::Normal,
+            Some(other) => MessageTypes::Translate(other),
+        }
+    } else {
+        MessageTypes::Normal
+    }
+}
+
 #[async_trait]
-impl EventHandler for Handler {
+impl serenity::prelude::EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
 
         ctx.set_activity(Activity::playing("with Sakamoto")).await;
 
-        let _commands = Command::set_global_application_commands(&ctx.http, |commands| {
-            commands
-                .create_application_command(|command| {
-                    command
-                        .name("Source Anime GIFs")
-                        .kind(serenity::model::prelude::command::CommandType::Message)
+        let _commands =SerenityCommand::set_global_application_commands(
+            &ctx.http, 
+            |commands| {
+                self.0.values().fold(
+                    commands, 
+                    |commands_so_far, command_to_add| {
+                        println!("Adding command {}", command_to_add.name());
+                        commands_so_far.create_application_command(
+                            |command| {
+                                command_to_add.options().iter().fold(
+                                    command
+                                        .name(command_to_add.name())
+                                        .description(command_to_add.description()),
+                                    |command_without_all_options, new_option| 
+                                    command_without_all_options.create_option(new_option),
+                    )
                 })
-                .create_application_command(|command| {
-                    command.name("ping").description("A ping command")
-                })
-                .create_application_command(|command| {
-                    command
-                        .name("leaderboard")
-                        .description("Get the reputation leaderboard")
-                        .create_option(|option| {
-                            option
-                                .name("how_many_users")
-                                .description("The number of leaders to show (default 10)")
-                                .kind(CommandOptionType::Integer)
-                                .required(false)
-                        })
-                })
-                .create_application_command(|command| {
-                    command
-                        .name("say")
-                        .description("Have Nano say something")
-                        .create_option(|option| {
-                            option
-                                .name("message")
-                                .description("What to say")
-                                .kind(CommandOptionType::String)
-                                .required(true)
-                        })
-                })
-                .create_application_command(|command| {
-                    command
-                        .name("lorem")
-                        .description("Lorem ipsum!")
-                        .create_option(|option| {
-                            option
-                                .name("number")
-                                .description("Number of random words")
-                                .kind(CommandOptionType::Integer)
-                                .required(true)
-                        })
-                })
-                .create_application_command(|command| {
-                    command
-                        .name("typst_render")
-                        .description("Renders using typst")
-                        .create_option(|option| {
-                            option
-                                .name("code")
-                                .description("Equation to render")
-                                .kind(CommandOptionType::String)
-                                .required(true)
-                        })
-                })
-                .create_application_command(|command| {
-                    command
-                        .name("typst_equation")
-                        .description("Renders equations using typst")
-                        .create_option(|option| {
-                            option
-                                .name("code")
-                                .description("Equation to render")
-                                .kind(CommandOptionType::String)
-                                .required(true)
-                        })
-                })
-                .create_application_command(|command| {
-                    let mut cmd = command
-                        .name("add_elements")
-                        .description("Add elements to a list (creating it if nonexistent)")
-                        .create_option(|option| {
-                            option
-                                .name("list_name")
-                                .description("The name of the list to add to")
-                                .kind(CommandOptionType::String)
-                                .required(true)
-                        });
-
-                    for i in 1..=10 {
-                        cmd = cmd.create_option(|option| {
-                            option
-                                .name(format!("element_{}", i))
-                                .description("Value to add")
-                                .kind(CommandOptionType::String)
-                                .required(false)
-                        });
-                    }
-
-                    cmd
-                })
-                .create_application_command(|command| {
-                    command
-                        .name("change_typst_theme")
-                        .description("Change how rendered Typst looks")
-                        .create_option(|option| {
-                            option
-                                .name("theme")
-                                .description("Color theme for Typst rendering")
-                                .kind(CommandOptionType::String)
-                                .add_string_choice("dark", "dark")
-                                .add_string_choice("light", "light")
-                                .required(false)
-                        })
-                        .create_option(|option| {
-                            option
-                                .name("page_size")
-                                .description("Auto/Default")
-                                .kind(CommandOptionType::Integer)
-                                .required(false)
-                        })
-                })
-                .create_application_command(|command| {
-                    let mut cmd = command
-                        .name("rem_elements")
-                        .description("Remove elements from a list")
-                        .create_option(|option| {
-                            option
-                                .name("list_name")
-                                .description("The name of the list to add to")
-                                .kind(CommandOptionType::String)
-                                .required(true)
-                        });
-
-                    for i in 1..=10 {
-                        cmd = cmd.create_option(|option| {
-                            option
-                                .name(format!("element_{}", i))
-                                .description("Value to remove")
-                                .kind(CommandOptionType::String)
-                                .required(false)
-                        });
-                    }
-
-                    cmd
-                })
-                .create_application_command(|command| {
-                    command
-                        .name("get_list")
-                        .description("Get the elements from a user's list")
-                        .create_option(|option| {
-                            option
-                                .name("list_name")
-                                .description("The name of the list to add to")
-                                .kind(CommandOptionType::String)
-                                .required(true)
-                        })
-                        .create_option(|option| {
-                            option
-                                .name("user")
-                                .description("The user to get the list from (default: you)")
-                                .kind(CommandOptionType::User)
-                                .required(false)
-                        })
-                })
-                .create_application_command(|command| {
-                    command
-                        .name("reputation")
-                        .description("Get the rep of a user")
-                        .create_option(|option| {
-                            option
-                                .name("user")
-                                .description("The user to get rep for (defaults to you)")
-                                .kind(CommandOptionType::User)
-                                .required(false)
-                        })
-                })
-                .create_application_command(|command| {
-                    command
-                        .name("thank")
-                        .description("Thank a user")
-                        .create_option(|option| {
-                            option
-                                .name("user")
-                                .description("The user to thank")
-                                .kind(CommandOptionType::User)
-                                .required(true)
-                        })
-                })
-                .create_application_command(|command| {
-                    command
-                        .name("translate")
-                        .description("Translate text")
-                        .create_option(|option| {
-                            option
-                                .name("text")
-                                .description("The text to translate")
-                                .kind(CommandOptionType::String)
-                                .required(true)
-                        })
-                        .create_option(|option| {
-                            let source = option
-                                .name("source")
-                                .description("The source language (auto-detects if not given)")
-                                .kind(CommandOptionType::String)
-                                .required(false);
-                            for lang_name in translate::available_langs::available_lang_names() {
-                                source.add_string_choice(&lang_name, &lang_name);
-                            }
-                            source
-                        })
-                        .create_option(|option| {
-                            let mut target = option
-                                .name("target")
-                                .description("The target language (defaults to English)")
-                                .kind(CommandOptionType::String)
-                                .required(false);
-                            for lang_name in translate::available_langs::available_lang_names() {
-                                target = target.add_string_choice(&lang_name, &lang_name);
-                            }
-                            target
-                        })
-                })
-                .create_application_command(|command| {
-                    command
-                        .name("texify")
-                        .description("Translate to LaTeX")
-                        .create_option(|option| {
-                            option
-                                .name("message")
-                                .description("Input to translate")
-                                .kind(CommandOptionType::String)
-                                .required(true)
-                        })
-                })
-                .create_application_command(|command| {
-                    command
-                        .name("prettify")
-                        .description("Translate to fancy Unicode")
-                        .create_option(|option| {
-                            option
-                                .name("message")
-                                .description("Input to translate")
-                                .kind(CommandOptionType::String)
-                                .required(true)
-                        })
-                })
-                .create_application_command(|command| {
-                    command
-                        .name("weather")
-                        .description("Get the weather for a place")
-                        .create_option(|opt| {
-                            opt.name("location")
-                                .description("Place name or postal code")
-                                .kind(CommandOptionType::String)
-                                .required(true)
-                        })
-                        .create_option(|opt| {
-                            opt.name("units")
-                                .description("Measurement units to use")
-                                .kind(CommandOptionType::String)
-                                .add_string_choice("imperial", "imperial")
-                                .add_string_choice("metric", "metric")
-                        })
-                })
-                .create_application_command(|command| {
-                    command
-                        .name("topic")
-                        .description("Start a conversation with a random question")
-                })
+            })
         })
         .await;
+
+        //     commands
+        //         .create_application_command(|command| {
+        //             command
+        //                 .name("Source Anime GIFs")
+        //                 .kind(serenity::model::prelude::command::CommandType::Message)
+        //         })
+        //         .create_application_command(|command| {
+        //             command.name("ping").description("A ping command")
+        //         })
+        //         .create_application_command(|command| {
+        //             command
+        //                 .name("leaderboard")
+        //                 .description("Get the reputation leaderboard")
+        //                 .create_option(|option| {
+        //                     option
+        //                         .name("how_many_users")
+        //                         .description("The number of leaders to show (default 10)")
+        //                         .kind(CommandOptionType::Integer)
+        //                         .required(false)
+        //                 })
+        //         })
+        //         .create_application_command(|command| {
+        //             command
+        //                 .name("say")
+        //                 .description("Have Nano say something")
+        //                 .create_option(|option| {
+        //                     option
+        //                         .name("message")
+        //                         .description("What to say")
+        //                         .kind(CommandOptionType::String)
+        //                         .required(true)
+        //                 })
+        //         })
+        //         .create_application_command(|command| {
+        //             command
+        //                 .name("lorem")
+        //                 .description("Lorem ipsum!")
+        //                 .create_option(|option| {
+        //                     option
+        //                         .name("number")
+        //                         .description("Number of random words")
+        //                         .kind(CommandOptionType::Integer)
+        //                         .required(true)
+        //                 })
+        //         })
+        //         .create_application_command(|command| {
+        //             command
+        //                 .name("typst_render")
+        //                 .description("Renders using typst")
+        //                 .create_option(|option| {
+        //                     option
+        //                         .name("code")
+        //                         .description("Equation to render")
+        //                         .kind(CommandOptionType::String)
+        //                         .required(true)
+        //                 })
+        //         })
+        //         .create_application_command(|command| {
+        //             let mut cmd = command
+        //                 .name("add_elements")
+        //                 .description("Add elements to a list (creating it if nonexistent)")
+        //                 .create_option(|option| {
+        //                     option
+        //                         .name("list_name")
+        //                         .description("The name of the list to add to")
+        //                         .kind(CommandOptionType::String)
+        //                         .required(true)
+        //                 });
+
+        //             for i in 1..=10 {
+        //                 cmd = cmd.create_option(|option| {
+        //                     option
+        //                         .name(format!("element_{}", i))
+        //                         .description("Value to add")
+        //                         .kind(CommandOptionType::String)
+        //                         .required(false)
+        //                 });
+        //             }
+
+        //             cmd
+        //         })
+        //         .create_application_command(|command| {
+        //             command
+        //                 .name("change_typst_theme")
+        //                 .description("Change how rendered Typst looks")
+        //                 .create_option(|option| {
+        //                     option
+        //                         .name("theme")
+        //                         .description("Color theme for Typst rendering")
+        //                         .kind(CommandOptionType::String)
+        //                         .add_string_choice("dark", "dark")
+        //                         .add_string_choice("light", "light")
+        //                         .required(false)
+        //                 })
+        //                 .create_option(|option| {
+        //                     option
+        //                         .name("page_size")
+        //                         .description("Auto/Default")
+        //                         .kind(CommandOptionType::Integer)
+        //                         .required(false)
+        //                 })
+        //         })
+        //         .create_application_command(|command| {
+        //             let mut cmd = command
+        //                 .name("rem_elements")
+        //                 .description("Remove elements from a list")
+        //                 .create_option(|option| {
+        //                     option
+        //                         .name("list_name")
+        //                         .description("The name of the list to add to")
+        //                         .kind(CommandOptionType::String)
+        //                         .required(true)
+        //                 });
+
+        //             for i in 1..=10 {
+        //                 cmd = cmd.create_option(|option| {
+        //                     option
+        //                         .name(format!("element_{}", i))
+        //                         .description("Value to remove")
+        //                         .kind(CommandOptionType::String)
+        //                         .required(false)
+        //                 });
+        //             }
+
+        //             cmd
+        //         })
+        //         .create_application_command(|command| {
+        //             command
+        //                 .name("get_list")
+        //                 .description("Get the elements from a user's list")
+        //                 .create_option(|option| {
+        //                     option
+        //                         .name("list_name")
+        //                         .description("The name of the list to add to")
+        //                         .kind(CommandOptionType::String)
+        //                         .required(true)
+        //                 })
+        //                 .create_option(|option| {
+        //                     option
+        //                         .name("user")
+        //                         .description("The user to get the list from (default: you)")
+        //                         .kind(CommandOptionType::User)
+        //                         .required(false)
+        //                 })
+        //         })
+        //         .create_application_command(|command| {
+        //             command
+        //                 .name("reputation")
+        //                 .description("Get the rep of a user")
+        //                 .create_option(|option| {
+        //                     option
+        //                         .name("user")
+        //                         .description("The user to get rep for (defaults to you)")
+        //                         .kind(CommandOptionType::User)
+        //                         .required(false)
+        //                 })
+        //         })
+        //         .create_application_command(|command| {
+        //             command
+        //                 .name("thank")
+        //                 .description("Thank a user")
+        //                 .create_option(|option| {
+        //                     option
+        //                         .name("user")
+        //                         .description("The user to thank")
+        //                         .kind(CommandOptionType::User)
+        //                         .required(true)
+        //                 })
+        //         })
+        //         .create_application_command(|command| {
+        //             command
+        //                 .name("translate")
+        //                 .description("Translate text")
+        //                 .create_option(|option| {
+        //                     option
+        //                         .name("text")
+        //                         .description("The text to translate")
+        //                         .kind(CommandOptionType::String)
+        //                         .required(true)
+        //                 })
+        //                 .create_option(|option| {
+        //                     let source = option
+        //                         .name("source")
+        //                         .description("The source language (auto-detects if not given)")
+        //                         .kind(CommandOptionType::String)
+        //                         .required(false);
+        //                     for lang_name in translate::available_langs::available_lang_names() {
+        //                         source.add_string_choice(&lang_name, &lang_name);
+        //                     }
+        //                     source
+        //                 })
+        //                 .create_option(|option| {
+        //                     let mut target = option
+        //                         .name("target")
+        //                         .description("The target language (defaults to English)")
+        //                         .kind(CommandOptionType::String)
+        //                         .required(false);
+        //                     for lang_name in translate::available_langs::available_lang_names() {
+        //                         target = target.add_string_choice(&lang_name, &lang_name);
+        //                     }
+        //                     target
+        //                 })
+        //         })
+        //         .create_application_command(|command| {
+        //             command
+        //                 .name("texify")
+        //                 .description("Translate to LaTeX")
+        //                 .create_option(|option| {
+        //                     option
+        //                         .name("message")
+        //                         .description("Input to translate")
+        //                         .kind(CommandOptionType::String)
+        //                         .required(true)
+        //                 })
+        //         })
+        //         .create_application_command(|command| {
+        //             command
+        //                 .name("prettify")
+        //                 .description("Translate to fancy Unicode")
+        //                 .create_option(|option| {
+        //                     option
+        //                         .name("message")
+        //                         .description("Input to translate")
+        //                         .kind(CommandOptionType::String)
+        //                         .required(true)
+        //                 })
+        //         })
+        //         .create_application_command(|command| {
+        //             command
+        //                 .name("weather")
+        //                 .description("Get the weather for a place")
+        //                 .create_option(|opt| {
+        //                     opt.name("location")
+        //                         .description("Place name or postal code")
+        //                         .kind(CommandOptionType::String)
+        //                         .required(true)
+        //                 })
+        //                 .create_option(|opt| {
+        //                     opt.name("units")
+        //                         .description("Measurement units to use")
+        //                         .kind(CommandOptionType::String)
+        //                         .add_string_choice("imperial", "imperial")
+        //                         .add_string_choice("metric", "metric")
+        //                 })
+        //         })
+        //         .create_application_command(|command| {
+        //             command
+        //                 .name("topic")
+        //                 .description("Start a conversation with a random question")
+        //         })
+        // })
+        // .await;
         if let Err(e) = _commands {
             println!("Error making slash commands: {}", e);
         }
+        else{
+            println!(
+                "Number of actual commands is {}", _commands.unwrap().len()
+            );
+        }
+        println!("But the real actual numner of commands is {}",SerenityCommand::get_global_application_commands(&ctx.http).await.unwrap().len())
     }
 
     async fn message(&self, _ctx: Context, _new_message: Message) {
-        // very important! this avoids infinite loops and whatnot
-        if _new_message.author.bot {
-            return;
-        }
-        let thank_re = Regex::new(r"(?i)(than[kx])|(tysm)|(^ty)|(\s+ty\s+)").unwrap();
-        if thank_re.is_match(&_new_message.content) && !_new_message.mentions.is_empty() {
-            if let Err(err) = rep::thank(&_ctx, &_new_message).await {
-                println!("Something went wrong! {}", err);
+        match get_message_type(&_new_message, &_ctx).await {
+            MessageTypes::Normal | MessageTypes::BotMessage => (),
+            MessageTypes::Thank => {
+                if let Err(err) = rep::thank(&_ctx, &_new_message).await {
+                    println!("Something went wrong! {}", err);
+                }
             }
-        } else if _new_message.mentions_me(&_ctx).await.unwrap_or(false) {
-            let bad_re = Regex::new(r"(?i)(bad)").unwrap();
-            let good_re =
-                Regex::new(r"(?i)(good bot)|(good job)|(nice work)|(nailed it)|(nice job)")
-                    .unwrap();
-            if bad_re.is_match(&_new_message.content) {
-                log_err(
-                    _new_message
-                        .reply(
-                            &_ctx,
-                            MessageBuilder::new()
-                                .push("https://c.tenor.com/8QjR5hC91b0AAAAC/nichijou-nano.gif")
-                                .build(),
-                        )
-                        .await,
-                );
-            } else if good_re.is_match(&_new_message.content) {
+            MessageTypes::GoodNano => {
                 log_err(
                     _new_message
                         .reply(
@@ -381,406 +453,435 @@ impl EventHandler for Handler {
                         .await,
                 );
             }
-        } else if let Some(typst_src) = catch_typst_message(&_new_message.content) {
-            match typst_main::render(TYPST_BASE.clone(), typst_src.as_str()) {
-                Ok(im)=>{&_new_message.channel_id.send_message(_ctx.http, |m| {
-                    m.add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into()})
-                }).await;
-                },
-                Err(e)=>{&_new_message.channel_id.send_message(_ctx.http, |m| {
-                    m.content(format!("```\n{}\n```\n{}", typst_src, e))
-                }).await;
-                }
-            };
-        }
-        else if !&_new_message
-            .content
-            .starts_with(&env::var("PREFIX").unwrap_or_else(|_| "nano, ".to_string()))
-        {
-            match detect_language(&_new_message.content) {
-                // only translate for non-English text detected with high probability
-                Some(Language::English) => (),
-                None => (),
-                Some(other) => {
-                    match translate::translate(
-                        &_new_message.content,
-                        Some(other),
-                        Language::English,
-                    )
-                    .await
-                    {
-                        Some(result) => {
-                            if result == _new_message.content {
-                                println!("Translation detection failed");
-                                dbg!(result.clone());
-                            } else if let Err(why) = _new_message.reply(&_ctx, result).await {
-                                println!("Error sending message: {}", why);
-                            }
+            MessageTypes::BadNano => {
+                log_err(
+                    _new_message
+                        .reply(
+                            &_ctx,
+                            MessageBuilder::new()
+                                .push("https://c.tenor.com/8QjR5hC91b0AAAAC/nichijou-nano.gif")
+                                .build(),
+                        )
+                        .await,
+                );
+            }
+            MessageTypes::Translate(other_language) => {
+                match translate::translate(
+                    &_new_message.content,
+                    Some(other_language),
+                    Language::English,
+                )
+                .await
+                {
+                    Some(result) => {
+                        if result == _new_message.content {
+                            println!("Translation detection failed");
+                            dbg!(result.clone());
+                        } else if let Err(why) = _new_message.reply(&_ctx, result).await {
+                            println!("Error sending message: {}", why);
                         }
-                        None => println!("Error translating"),
                     }
+                    None => println!("Error translating"),
                 }
+            }
+            MessageTypes::Typst(typst_src) => {
+                let _ = &_new_message
+                    .channel_id
+                    .send_message(_ctx.http, |m| {
+                        match typst_main::render(TYPST_BASE.clone(), typst_src.as_str()) {
+                            Ok(im) => m.add_file(AttachmentType::Bytes {
+                                data: im.into(),
+                                filename: "Rendered.png".into(),
+                            }),
+                            Err(e) => m.content(format!("```\n{}\n```\n{}", typst_src, e)),
+                        }
+                    })
+                    .await;
             }
         }
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(command) = interaction {
-            let data_str = match command.data.name.as_str() {
-                "translate" => {
-                    let mut options = HashMap::new();
-                    for opt in &command.data.options {
-                        if let Some(serde_json::value::Value::String(val)) = &opt.value {
-                            options.insert(opt.name.as_str(), val);
-                        }
-                    }
-                    if !options.contains_key("text") {
-                        "No text!".to_string()
-                    } else {
-                        match translate::translate(
-                            options.get("text").unwrap_or(&&("Peligro!".to_string())),
-                            options
-                                .get("source")
-                                .and_then(|l| translate::available_langs::get_language(l.as_str())),
-                            // default target language is English
-                            translate::available_langs::get_language(
-                                options.get("target").unwrap_or(&&"English".to_string()),
-                            )
-                            .unwrap_or(Language::English),
-                        )
-                        .await
-                        {
-                            Some(result) => result.to_string(),
-                            None => "Error translating :(".to_string(),
-                        }
-                    }
-                },
-                "change_typst_theme" => {
-                    // parse arguments
-                    let mut new_theme = TYPST_BASE.get_choices();
-                    for opt in &command.data.options {
-                        if let Some(serde_json::Value::String(s)) = &opt.value {
-                            if opt.name.as_str() == "theme" {
-                                new_theme.theme = match s.as_ref() {
-                                    "dark" => typst_base::Theme::Dark,
-                                    "light" => typst_base::Theme::Light,
-                                    _ => new_theme.theme,
-                                }
-                            }
-                        }
-                    }
-                    TYPST_BASE.customise(new_theme);
-                    "Customized theme!".to_string()
-                }
-                _ => "".to_string(),
-            };
-
-            let data: Box<dyn CommandResponder> = match command.data.name.as_str() {
-                "weather" => {
-                    // parse arguments
-                    let mut units = UnitSystem::Metric;
-                    let mut loc_name = "New York, NY";
-                    for opt in &command.data.options {
-                        if let Some(serde_json::Value::String(s)) = &opt.value {
-                            if opt.name.as_str() == "units" {
-                                let n = opt.name.as_str();
-                                units = match n {
-                                    "metric" => UnitSystem::Metric,
-                                    "imperial" => UnitSystem::Imperial,
-                                    _ => units,
-                                }
-                            } else if opt.name.as_str() == "location" {
-                                loc_name = s.as_str();
-                            }
-                        }
-                    }
-                    let loc = find_location(loc_name).await;
-                    match &loc {
-                        Some(l) => {
-                            let forecast = get_weather_forecast_from_loc(l, &units).await;
-                            if let Some(f) = forecast {
-                                weather_forecast_msg(l, &f, &command, &ctx).await;
-                            }
-                        }
-                        None => {}
-                    };
-                    // Box::new(WeatherEmbed::new(location, units).await)
-                    Box::new(StringContent::new(""))
-                }
-                _ => Box::new(StringContent::new(data_str)),
-            };
-            if let Err(why) = command
-                .create_interaction_response(&ctx.http, |response| {
-                    response
-                        .kind(InteractionResponseType::ChannelMessageWithSource)
-                        .interaction_response_data(|msg|
-                            match command.data.name.as_str() {
-                            "ping" => msg.content("Pong!"),
-                            "Source Anime GIFs" => {
-                                match command.data.target() {
-                                    Some(target) => {
-                                        match target {
-                                            ResolvedTarget::Message(target_msg) => trace_moe::trace_response(&target_msg, msg),
-                                            _ => msg.content("Cannot use with user")
-                                        }
-                                    }
-                                    None => msg.content("Must select a message with image!")
-                                }
-                            },
-                            "leaderboard" => {
-                                let default10 = CommandDataOptionValue::Integer(10);
-                                let n = command
-                                    .data
-                                    .options
-                                    .get(0)
-                                    .and_then(|x| x.resolved.as_ref())
-                                    .unwrap_or(
-                                        &default10
-                                    );
-
-                                if let &CommandDataOptionValue::Integer(n) = n
-                                {
-                                    if let Ok(leaders) = rep::top_rep(n as isize) {
-                                        let mut list = String::from("");
-                                        for (user_name, rep) in leaders {
-                                            list.push_str(&format!(
-                                                "**{}** \u{2014} **{}** rep\n",
-                                                user_name, rep
-                                            ));
-                                        }
-                                        msg.embed(|emb| {
-                                            emb.title("Reputation Leaderboard")
-                                                .color(Color::PURPLE)
-                                                .field("Leaders", list, false)
-                                        })
-                                    } else {
-                                        msg.content("Uh-oh! I'm having a moment...")
-                                    }
-                                } else {
-                                    msg.content("Couldn't get leaderboard :(")
-                                }
-                            }
-                            "say" => {
-                                let message = command
-                                    .data
-                                    .options
-                                    .get(0)
-                                    .and_then(|x| x.resolved.as_ref());
-
-                                if let Some(CommandDataOptionValue::String(
-                                    content,
-                                )) = message
-                                {
-                                    msg.content(content).allowed_mentions(|am| am.empty_parse())
-                                } else {
-                                    msg.content("Couldn't say nothin' :()")
-                                }
-                            }
-                            "add_elements" => {
-                                let (msg, res) = set::add_elements_command(&command, msg);
-                                match res {
-                                    Ok(_) => msg,
-                                    Err(_) => msg.content("An error occured. Pollards, why? WHYYYYY"),
-                                }
-                            }
-                            "rem_elements" => {
-                                let (msg, res) = set::rem_elements_command(&command, msg);
-                                match res {
-                                    Ok(_) => msg,
-                                    Err(_) => msg.content("An error occured. Pollards, why? WHYYYYY"),
-                                }
-                            }
-                            "get_list" => {
-                                let (msg, res) = set::get_list_command(&command, msg);
-                                match res {
-                                    Ok(_) => msg,
-                                    Err(_) => msg.content("An error occured. Pollards, why? WHYYYYY"),
-                                }
-                            }
-                            "reputation" => {
-                                let message = command
-                                    .data
-                                    .options
-                                    .get(0)
-                                    .and_then(|x| x.resolved.as_ref());
-
-                                let user = match message {
-                                    Some(CommandDataOptionValue::User(
-                                        usr,
-                                        _,
-                                    )) => usr,
-                                    _ => &command.user,
-                                };
-
-                                if let Ok((rep, rank)) = rep::get_user_rep(user) {
-                                    msg.content(format!(
-                                        "User **{}** has rep **{}** (rank **{}**)",
-                                        user.name, rep, rank
-                                    ))
-                                } else {
-                                    msg.content("Couldn't find user :(")
-                                }
-                            }
-                            "thank" => {
-                                let message = command
-                                    .data
-                                    .options
-                                    .get(0)
-                                    .and_then(|x| x.resolved.as_ref());
-
-                                let user = match message {
-                                    Some(CommandDataOptionValue::User(
-                                        usr,
-                                        _,
-                                    )) => usr,
-                                    _ => &command.user,
-                                };
-
-                                if let Ok(string) = rep::thank_slash(&command.user, user) {
-                                    msg.content(string)
-                                } else {
-                                    msg.content("The database broke! Pollards! POOOLLLLAAARRDDSSS!")
-                                }
-                            },
-                            "weather" => {
-                                msg.ephemeral(true).content("Loading...")
-                            }
-                            "translate" => data.response(&command, &ctx, msg),
-                            "texify" => {
-                                let message = command
-                                    .data
-                                    .options
-                                    .get(0)
-                                    .and_then(|x| x.resolved.as_ref());
-
-                                if let Some(CommandDataOptionValue::String(
-                                    content,
-                                )) = message
-                                {
-                                    let raw_tex = panmath::texify(content).unwrap_or_else(|| "Couldn't parse <-<".to_string());
-                                    let tex_url = format!(
-                                        r"https://latex.codecogs.com/png.latex?\dpi{{300}}{{\color[rgb]{{0.7,0.7,0.7}}{}",
-                                        raw_tex
-                                    )
-                                        .replace(' ', "&space;")
-                                        .replace('\\', "%5C");
-                                    msg.content(tex_url).allowed_mentions(|am| am.empty_parse())
-                                } else {
-                                    msg.content("Couldn't say nothin' :()")
-                                }
-                            }
-                            "prettify" => {
-                                let message = command
-                                    .data
-                                    .options
-                                    .get(0)
-                                    .and_then(|x| x.resolved.as_ref());
-
-                                if let Some(CommandDataOptionValue::String(
-                                    content,
-                                )) = message
-                                {
-                                    let texed = format!(
-                                        "${}$",
-                                        panmath::unicodeify(content)
-                                            .unwrap_or_else(|| "Couldn't parse <-<".to_string())
-                                    );
-                                    msg.content(texed).allowed_mentions(|am| am.empty_parse())
-                                } else {
-                                    msg.content("Couldn't say nothin' :()")
-                                }
-                            }
-                            "topic" => {
-                                let f_res = File::open("./topics.txt");
-                                if let Ok(f) = f_res {
-                                    let reader = BufReader::new(f);
-                                    let mut rng = rand::thread_rng();
-                                    let choice = reader.lines().choose(&mut rng);
-                                    if let Some(Ok(topic)) = choice {
-                                        msg.content(topic)
-                                    }
-                                    else {
-                                        dbg!(choice);
-                                        msg.content("Something went wrong...".to_string())
-                                    }
-                                } else {
-                                    msg.content("Something went wrong...".to_string())
-                                }
-                            }
-                            "lorem" => {
-                                let mess = command
-                                .data
-                                .options
-                                .get(0)
-                                .and_then(|x| x.resolved.as_ref());
-                            
-
-                            if let Some(CommandDataOptionValue::Integer(n))= mess{
-                                if *n<=0{
-                                    msg.content(typst_main::my_lorem(10))
-                                }else{
-                                    msg.content(typst_main::my_lorem(*n as usize))
-                                    // .add_file(AttachmentType::Bytes { data: Cow::from(vec![1,2,3]), filename: "what.jpg".into() })
-
-                                }
-                            }
-                            else {
-                                msg.content("oopsie")
-                            }
-                            },
-                            "typst_render"=>{
-                                let mess = command
-                                .data
-                                .options
-                                .get(0)
-                                .and_then(|x| x.resolved.as_ref());
-
-                            if let Some(CommandDataOptionValue::String(source))= mess{
-                                match typst_main::render(TYPST_BASE.clone(), source.as_str()) {
-                                    Ok(im)=>{   msg.content(
-                                        format!("```\n{}\n```", source)
-                                    ).add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into() })
-                                },
-                                    Err(e)=>{msg.content(
-                                        format!("```\n{}\n```\n{}", source, e))},
-                                }
-                            }else{
-                                msg.content("Bigger oopsie")
-                            }
-                            },
-                                "change_typst_theme" => {
-                                    msg.content("Changed theme!")
-                                },
-                            "typst_equation"=>{
-                                let mess = command
-                                .data
-                                .options
-                                .get(0)
-                                .and_then(|x| x.resolved.as_ref());
-
-                            if let Some(CommandDataOptionValue::String(source))= mess{
-                                let source_with_limiters = format!("$\n{}\n$", source);
-
-                                match typst_main::render(TYPST_BASE.clone(), source_with_limiters.as_str()) {
-                                    Ok(im)=>{   msg.content(
-                                        format!("```\n{}\n```", source)
-                                    ).add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into() })
-                                },
-                                    Err(e)=>{msg.content(
-                                        format!("```\n{}\n```\n{}", source, e))},
-                                }
-                            }else{
-                                msg.content("Bigger oopsie")
-                            }
-                            }
-                            _ => msg.content("Drawing a blank...".to_string()),
+            match self.0.get(command.data.name.as_str()) {
+                Some(my_command) => {
+                    if let Err(_) = command
+                        .create_interaction_response(&ctx.http, |response| {
+                            response
+                                .kind(InteractionResponseType::ChannelMessageWithSource)
+                                .interaction_response_data(|msg| {
+                                    my_command.interaction(&ctx, &command, msg)
+                                })
                         })
-                })
-                .await
-            {
-                println!("Cannot respond to slash command: {}", why);
+                        .await
+                    {
+                        //Error in Creating response; will do later?
+                    };
+                }
+                None => {
+                    //Command name is not in the hashmap of command names, i guess can ignore?
+                }
             }
-        };
+        } else {
+            //I do not think this needs to be filled?
+        }
+        return;
+
+        // if let Interaction::ApplicationCommand(command) = interaction {
+        //     let data_str = match command.data.name.as_str() {
+        //         "translate" => {
+        //             let mut options = HashMap::new();
+        //             for option in &command.data.options {
+        //                 if let Some(serde_json::value::Value::String(val)) = &option.value {
+        //                     options.insert(option.name.as_str(), val);
+        //                 }
+        //             }
+        //             if !options.contains_key("text") {
+        //                 "No text!".to_string()
+        //             } else {
+        //                 match translate::translate(
+        //                     options.get("text").unwrap_or(&&("Peligro!".to_string())),
+        //                     options
+        //                         .get("source")
+        //                         .and_then(|l| translate::available_langs::get_language(l.as_str())),
+        //                     // default target language is English
+        //                     translate::available_langs::get_language(
+        //                         options.get("target").unwrap_or(&&"English".to_string()),
+        //                     )
+        //                     .unwrap_or(Language::English),
+        //                 )
+        //                 .await
+        //                 {
+        //                     Some(result) => result.to_string(),
+        //                     None => "Error translating :(".to_string(),
+        //                 }
+        //             }
+        //         }
+        //         "change_typst_theme" => {
+        //             // parse arguments
+        //             let mut new_theme = TYPST_BASE.get_choices();
+        //             for opt in &command.data.options {
+        //                 if let Some(serde_json::Value::String(s)) = &opt.value {
+        //                     if opt.name.as_str() == "theme" {
+        //                         new_theme.theme = match s.as_ref() {
+        //                             "dark" => typst_base::Theme::Dark,
+        //                             "light" => typst_base::Theme::Light,
+        //                             _ => new_theme.theme,
+        //                         }
+        //                     }
+        //                 }
+        //             }
+        //             TYPST_BASE.customise(new_theme);
+        //             "Customized theme!".to_string()
+        //         }
+        //         _ => "".to_string(),
+        //     };
+
+        //     let data: Box<dyn CommandResponder> = match command.data.name.as_str() {
+        //         "weather" => {
+        //             // parse arguments/ctx
+        //             let mut units = UnitSystem::Metric;
+        //             let mut loc_name = "New York, NY";
+        //             for opt in &command.data.options {
+        //                 if let Some(serde_json::Value::String(s)) = &opt.value {
+        //                     if opt.name.as_str() == "units" {
+        //                         let n = opt.name.as_str();
+        //                         units = match n {
+        //                             "metric" => UnitSystem::Metric,
+        //                             "imperial" => UnitSystem::Imperial,
+        //                             _ => units,
+        //                         }
+        //                     } else if opt.name.as_str() == "location" {
+        //                         loc_name = s.as_str();
+        //                     }
+        //                 }
+        //             }
+        //             let loc = find_location(loc_name).await;
+        //             match &loc {
+        //                 Some(l) => {
+        //                     let forecast = get_weather_forecast_from_loc(l, &units).await;
+        //                     if let Some(f) = forecast {
+        //                         weather_forecast_msg(l, &f, &command, &ctx).await;
+        //                     }
+        //                 }
+        //                 None => {}
+        //             };
+        //             // Box::new(WeatherEmbed::new(location, units).await)
+        //             Box::new(StringContent::new(""))
+        //         }
+        //         _ => Box::new(StringContent::new(data_str)),
+        //     };
+        //     if let Err(why) = command
+        //         .create_interaction_response(&ctx.http, |response| {
+        //             response
+        //                 .kind(InteractionResponseType::ChannelMessageWithSource)
+        //                 .interaction_response_data(|msg|
+        //                     match command.data.name.as_str() {
+        //                     "ping" => msg.content("Pong!"),
+        //                     "Source Anime GIFs" => {
+        //                         match command.data.target() {
+        //                             Some(target) => {
+        //                                 match target {
+        //                                     ResolvedTarget::Message(target_msg) => trace_moe::trace_response(&target_msg, msg),
+        //                                     _ => msg.content("Cannot use with user")
+        //                                 }
+        //                             }
+        //                             None => msg.content("Must select a message with image!")
+        //                         }
+        //                     },
+        //                     "leaderboard" => {
+        //                         let default10 = CommandDataOptionValue::Integer(10);
+        //                         let n = command
+        //                             .data
+        //                             .options
+        //                             .get(0)
+        //                             .and_then(|x| x.resolved.as_ref())
+        //                             .unwrap_or(
+        //                                 &default10
+        //                             );
+
+        //                         if let &CommandDataOptionValue::Integer(n) = n
+        //                         {
+        //                             if let Ok(leaders) = rep::top_rep(n as isize) {
+        //                                 let mut list = String::from("");
+        //                                 for (user_name, rep) in leaders {
+        //                                     list.push_str(&format!(
+        //                                         "**{}** \u{2014} **{}** rep\n",
+        //                                         user_name, rep
+        //                                     ));
+        //                                 }
+        //                                 msg.embed(|emb| {
+        //                                     emb.title("Reputation Leaderboard")
+        //                                         .color(Color::PURPLE)
+        //                                         .field("Leaders", list, false)
+        //                                 })
+        //                             } else {
+        //                                 msg.content("Uh-oh! I'm having a moment...")
+        //                             }
+        //                         } else {
+        //                             msg.content("Couldn't get leaderboard :(")
+        //                         }
+        //                     }
+        //                     "say" => {
+        //                         let message = command
+        //                             .data
+        //                             .options
+        //                             .get(0)
+        //                             .and_then(|x| x.resolved.as_ref());
+
+        //                         if let Some(CommandDataOptionValue::String(
+        //                             content,
+        //                         )) = message
+        //                         {
+        //                             msg.content(content).allowed_mentions(|am| am.empty_parse())
+        //                         } else {
+        //                             msg.content("Couldn't say nothin' :()")
+        //                         }
+        //                     }
+        //                     "add_elements" => {
+        //                         let (msg, res) = set::add_elements_command(&command, msg);
+        //                         match res {
+        //                             Ok(_) => msg,
+        //                             Err(_) => msg.content("An error occured. Pollards, why? WHYYYYY"),
+        //                         }
+        //                     }
+        //                     "rem_elements" => {
+        //                         let (msg, res) = set::rem_elements_command(&command, msg);
+        //                         match res {
+        //                             Ok(_) => msg,
+        //                             Err(_) => msg.content("An error occured. Pollards, why? WHYYYYY"),
+        //                         }
+        //                     }
+        //                     "get_list" => {
+        //                         let (msg, res) = set::get_list_command(&command, msg);
+        //                         match res {
+        //                             Ok(_) => msg,
+        //                             Err(_) => msg.content("An error occured. Pollards, why? WHYYYYY"),
+        //                         }
+        //                     }
+        //                     "reputation" => {
+        //                         let message = command
+        //                             .data
+        //                             .options
+        //                             .get(0)
+        //                             .and_then(|x| x.resolved.as_ref());
+
+        //                         let user = match message {
+        //                             Some(CommandDataOptionValue::User(
+        //                                 usr,
+        //                                 _,
+        //                             )) => usr,
+        //                             _ => &command.user,
+        //                         };
+
+        //                         if let Ok((rep, rank)) = rep::get_user_rep(user) {
+        //                             msg.content(format!(
+        //                                 "User **{}** has rep **{}** (rank **{}**)",
+        //                                 user.name, rep, rank
+        //                             ))
+        //                         } else {
+        //                             msg.content("Couldn't find user :(")
+        //                         }
+        //                     }
+        //                     "thank" => {
+        //                         let message = command
+        //                             .data
+        //                             .options
+        //                             .get(0)
+        //                             .and_then(|x| x.resolved.as_ref());
+
+        //                         let user = match message {
+        //                             Some(CommandDataOptionValue::User(
+        //                                 usr,
+        //                                 _,
+        //                             )) => usr,
+        //                             _ => &command.user,
+        //                         };
+
+        //                         if let Ok(string) = rep::thank_slash(&command.user, user) {
+        //                             msg.content(string)
+        //                         } else {
+        //                             msg.content("The database broke! Pollards! POOOLLLLAAARRDDSSS!")
+        //                         }
+        //                     },
+        //                     "weather" => {
+        //                         msg.ephemeral(true).content("Loading...")
+        //                     }
+        //                     "translate" => data.response(&command, &ctx, msg),
+        //                     "texify" => {
+        //                         let message = command
+        //                             .data
+        //                             .options
+        //                             .get(0)
+        //                             .and_then(|x| x.resolved.as_ref());
+
+        //                         if let Some(CommandDataOptionValue::String(
+        //                             content,
+        //                         )) = message
+        //                         {
+        //                             let raw_tex = panmath::texify(content).unwrap_or_else(|| "Couldn't parse <-<".to_string());
+        //                             let tex_url = format!(
+        //                                 r"https://latex.codecogs.com/png.latex?\dpi{{300}}{{\color[rgb]{{0.7,0.7,0.7}}{}",
+        //                                 raw_tex
+        //                             )
+        //                                 .replace(' ', "&space;")
+        //                                 .replace('\\', "%5C");
+        //                             msg.content(tex_url).allowed_mentions(|am| am.empty_parse())
+        //                         } else {
+        //                             msg.content("Couldn't say nothin' :()")
+        //                         }
+        //                     }
+        //                     "prettify" => {
+        //                         let message = command
+        //                             .data
+        //                             .options
+        //                             .get(0)
+        //                             .and_then(|x| x.resolved.as_ref());
+
+        //                         if let Some(CommandDataOptionValue::String(
+        //                             content,
+        //                         )) = message
+        //                         {
+        //                             let texed = format!(
+        //                                 "${}$",
+        //                                 panmath::unicodeify(content)
+        //                                     .unwrap_or_else(|| "Couldn't parse <-<".to_string())
+        //                             );
+        //                             msg.content(texed).allowed_mentions(|am| am.empty_parse())
+        //                         } else {
+        //                             msg.content("Couldn't say nothin' :()")
+        //                         }
+        //                     }
+        //                     "topic" => {
+        //                         let f_res = File::open("./topics.txt");
+        //                         if let Ok(f) = f_res {
+        //                             let reader = BufReader::new(f);
+        //                             let mut rng = rand::thread_rng();
+        //                             let choice = reader.lines().choose(&mut rng);
+        //                             if let Some(Ok(topic)) = choice {
+        //                                 msg.content(topic)
+        //                             }
+        //                             else {
+        //                                 dbg!(choice);
+        //                                 msg.content("Something went wrong...".to_string())
+        //                             }
+        //                         } else {
+        //                             msg.content("Something went wrong...".to_string())
+        //                         }
+        //                     }
+        //                     "lorem" => {
+        //                         let mess = command
+        //                         .data
+        //                         .options
+        //                         .get(0)
+        //                         .and_then(|x| x.resolved.as_ref());
+
+        //                     if let Some(CommandDataOptionValue::Integer(n))= mess{
+        //                         if *n<=0{
+        //                             msg.content(typst_main::my_lorem(10))
+        //                         }else{
+        //                             msg.content(typst_main::my_lorem(*n as usize))
+        //                             // .add_file(AttachmentType::Bytes { data: Cow::from(vec![1,2,3]), filename: "what.jpg".into() })
+
+        //                         }
+        //                     }
+        //                     else {
+        //                         msg.content("oopsie")
+        //                     }
+        //                     },
+        //                     "typst_render"=>{
+        //                         let mess = command
+        //                         .data
+        //                         .options
+        //                         .get(0)
+        //                         .and_then(|x| x.resolved.as_ref());
+
+        //                     if let Some(CommandDataOptionValue::String(source))= mess{
+        //                         match typst_main::render(TYPST_BASE.clone(), source.as_str()) {
+        //                             Ok(im)=>{   msg.content(
+        //                                 format!("```\n{}\n```", source)
+        //                             ).add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into() })
+        //                         },
+        //                             Err(e)=>{msg.content(
+        //                                 format!("```\n{}\n```\n{}", source, e))},
+        //                         }
+        //                     }else{
+        //                         msg.content("Bigger oopsie")
+        //                     }
+        //                     },
+        //                         "change_typst_theme" => {
+        //                             msg.content("Changed theme!")
+        //                         },
+        //                     "typst_equation"=>{
+        //                         let mess = command
+        //                         .data
+        //                         .options
+        //                         .get(0)
+        //                         .and_then(|x| x.resolved.as_ref());
+
+        //                     if let Some(CommandDataOptionValue::String(source))= mess{
+        //                         let source_with_limiters = format!("$\n{}\n$", source);
+
+        //                         match typst_main::render(TYPST_BASE.clone(), source_with_limiters.as_str()) {
+        //                             Ok(im)=>{   msg.content(
+        //                                 format!("```\n{}\n```", source)
+        //                             ).add_file(AttachmentType::Bytes { data: im.into() , filename: "Rendered.png".into() })
+        //                         },
+        //                             Err(e)=>{msg.content(
+        //                                 format!("```\n{}\n```\n{}", source, e))},
+        //                         }
+        //                     }else{
+        //                         msg.content("Bigger oopsie")
+        //                     }
+        //                     }
+        //                     _ => msg.content("Drawing a blank...".to_string()),
+        //                 })
+        //         })
+        //         .await
+        //     {
+        //         println!("Cannot respond to slash command: {}", why);
+        //     }
+        // };
     }
 }
 
@@ -1108,7 +1209,7 @@ async fn main() {
         | GatewayIntents::GUILD_EMOJIS_AND_STICKERS;
 
     let mut client = Client::builder(&token, intents)
-        .event_handler(Handler)
+        .event_handler(Handler::new())
         .application_id(application_id)
         .framework(framework)
         .register_serenity_additions()

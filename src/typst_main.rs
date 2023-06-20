@@ -1,12 +1,26 @@
+use crate::command_responder::Command;
 use crate::config::{TYPST_CLOSE_DELIM, TYPST_OPEN_DELIM};
 use regex::{escape, Regex};
+use serenity::http::multipart::Multipart;
+use serenity::model::application::command::CommandOptionType;
 use std::io::Cursor;
 use std::sync::Arc;
 use typst::geom::RgbaColor;
+use typst::syntax::ErrorPos;
 use typst_library::text::lorem;
 
 use crate::typst_base::{
     determine_pixels_per_point, Preamble, RenderErrors, ToCompile, TypstEssentials,
+};
+
+use serenity::{
+    builder::{CreateApplicationCommandOption, CreateInteractionResponseData},
+    model::{
+        application::interaction::application_command::CommandDataOptionValue,
+        channel::AttachmentType,
+        prelude::interaction::application_command::ApplicationCommandInteraction,
+    },
+    prelude::Context,
 };
 
 pub(crate) fn my_lorem(num: usize) -> String {
@@ -93,6 +107,125 @@ impl std::fmt::Display for RenderErrors {
                             + "\n")
                 )
             }
+        }
+    }
+}
+
+pub(crate) struct TypstEqtn {
+    base: Arc<TypstEssentials>,
+}
+
+impl TypstEqtn {
+    pub(crate) fn new(typst_base: Arc<TypstEssentials>) -> TypstEqtn {
+        TypstEqtn { base: typst_base }
+    }
+}
+
+impl Command for TypstEqtn {
+    fn name(&self) -> &str {
+        "typst_equation"
+    }
+    fn description(&self) -> &str {
+        "Renders equations using typst"
+    }
+
+    fn options(
+        &self,
+    ) -> Vec<fn(&mut CreateApplicationCommandOption) -> &mut CreateApplicationCommandOption> {
+        vec![|option: &mut CreateApplicationCommandOption| {
+            option
+                .name("code")
+                .description("Equation to render")
+                .kind(CommandOptionType::String)
+                .required(true)
+        }]
+    }
+
+    fn interaction<'a, 'b>(
+        &self,
+        ctx: &Context,
+        command: &ApplicationCommandInteraction,
+        msg: &'a mut CreateInteractionResponseData<'b>,
+    ) -> &'a mut CreateInteractionResponseData<'b> {
+        // let mut msg = serenity::builder::CreateInteractionResponseData::default();
+        let mess = command
+            .data
+            .options
+            .get(0)
+            .and_then(|x| x.resolved.as_ref());
+
+        if let Some(CommandDataOptionValue::String(source)) = mess {
+            let source_with_limiters = format!("$\n{}\n$", source);
+
+            match render(self.base.clone(), source_with_limiters.as_str()) {
+                Ok(im) => {
+                    msg.content(format!("```\n{}\n```", source))
+                        .add_file(AttachmentType::Bytes {
+                            data: im.into(),
+                            filename: "Rendered.png".into(),
+                        })
+                }
+                Err(e) => msg.content(format!("```\n{}\n```\n{}", source, e)),
+            }
+        } else {
+            msg.content("Bigger oopsie")
+        }
+    }
+}
+
+pub(crate) struct TypstRender {
+    base: Arc<TypstEssentials>,
+}
+
+impl TypstRender {
+    pub(crate) fn new(typst_base: Arc<TypstEssentials>) -> TypstRender {
+        TypstRender { base: typst_base }
+    }
+}
+
+impl Command for TypstRender {
+    fn name(&self) -> &str {
+        "typst_render"
+    }
+    fn description(&self) -> &str {
+        "renders with typst"
+    }
+    fn options(
+        &self,
+    ) -> Vec<fn(&mut CreateApplicationCommandOption) -> &mut CreateApplicationCommandOption> {
+        vec![|option: &mut CreateApplicationCommandOption| {
+            option
+                .name("code")
+                .description("typst code to render")
+                .kind(CommandOptionType::String)
+                .required(true)
+        }]
+    }
+    fn interaction<'a, 'b>(
+        &self,
+        ctx: &Context,
+        command: &ApplicationCommandInteraction,
+        msg: &'a mut CreateInteractionResponseData<'b>,
+    ) -> &'a mut CreateInteractionResponseData<'b> {
+        let mess = command
+            .data
+            .options
+            .get(0)
+            .and_then(|x| x.resolved.as_ref());
+
+        if let Some(CommandDataOptionValue::String(source)) = mess {
+            match render(self.base.clone(), source.as_str()) {
+                Ok(im) => {
+                    msg.content(format!("```\n{}\n```", source))
+                        .add_file(AttachmentType::Bytes {
+                            data: im.into(),
+                            filename: "Rendered.png".into(),
+                        })
+                }
+                Err(e) => msg.content(format!("```\n{}\n```\n{}", source, e)),
+            }
+        } else {
+            msg.content("Bigger oopsie")
         }
     }
 }

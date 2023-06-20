@@ -1,9 +1,13 @@
 //! Trait that responds to commands.
 
 use serenity::{
-    builder::CreateInteractionResponseData, client::Context,
-    model::application::interaction::application_command::ApplicationCommandInteraction,
+    builder::{CreateApplicationCommandOption, CreateInteractionResponseData},
+    client::Context,
+    model::application::interaction::{
+        application_command::ApplicationCommandInteraction, Interaction,
+    },
 };
+use typst::diag::StrResult;
 
 pub(crate) trait CommandResponder: Sync + Send {
     /// Responds to a command.
@@ -37,6 +41,27 @@ impl CommandResponder for StringContent {
         msg: &'a mut CreateInteractionResponseData<'b>,
     ) -> &'a mut CreateInteractionResponseData<'b> {
         msg.content(&self.content)
+    }
+}
+
+pub trait Command: Sync + Send{
+    fn name(&self) -> &str;
+    fn description(&self) -> &str;
+    // fn get_options(&self, option: &mut CreateApplicationCommandOption)-> Vec<&mut CreateApplicationCommandOption>;
+    fn interaction<'a, 'b>(
+        &self,
+        ctx: &Context,
+        command: &ApplicationCommandInteraction,
+        msg: &'a mut CreateInteractionResponseData<'b>
+    ) ->&'a mut CreateInteractionResponseData<'b>;
+
+    fn options(
+        &self,
+    ) -> Vec<fn(&mut CreateApplicationCommandOption) -> &mut CreateApplicationCommandOption>;
+
+    fn option_names(&self) -> Vec<String> {
+        //TODO: A smart way of getting the option names
+        todo!()
     }
 }
 
