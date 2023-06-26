@@ -12,7 +12,7 @@ use serenity::{
 };
 use serenity_additions::menu::{MenuBuilder, Page};
 
-use crate::command_responder::Command;
+use crate::{command_responder::Command, utils::log_err};
 
 /// Base URL for API.
 const API_URL: &str = "https://api.dictionaryapi.dev/api/v2/entries/en";
@@ -22,20 +22,20 @@ const API_URL: &str = "https://api.dictionaryapi.dev/api/v2/entries/en";
 #[serde(rename_all = "camelCase")]
 struct DictionaryDefinition {
     pub word: String,
-    pub phonetic: String,
+    pub phonetic: Option<String>,
     pub phonetics: Vec<Pronunciation>,
     pub meanings: Vec<Meaning>,
     pub source_urls: Vec<String>,
 }
 
 impl DictionaryDefinition {
-    pub fn write_message(&self) -> Page<'static> {
-        let mut m = CreateMessage::default();
-
+    pub fn write_message<'a, 'b>(&self, m: &'a mut CreateMessage<'b>) -> &'a mut CreateMessage<'b> {
         m.embed(|e| {
-            let mut e = e
-                .title(self.word.clone())
-                .description(self.phonetic.clone());
+            let mut e = e.title(self.word.clone()).description(
+                self.phonetic
+                    .clone()
+                    .unwrap_or("No single pronunciation".to_string()),
+            );
             if let Some(url) = self.source_urls.get(0) {
                 e = e.url(url);
             };
@@ -44,7 +44,7 @@ impl DictionaryDefinition {
                 .field(
                     "Pronunciations",
                     format!(
-                        "`{}`",
+                        "{}",
                         self.phonetics
                             .iter()
                             .map(|pro| pro.text.clone())
@@ -80,13 +80,19 @@ impl DictionaryDefinition {
             e
         });
 
-        Page::new_static(m)
+        m
+    }
+    pub fn write_page(&self) -> Page<'static> {
+        let mut msg = CreateMessage::default();
+        self.write_message(&mut msg);
+        Page::new_static(msg)
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Pronunciation {
+    #[serde(default)]
     pub text: String,
     #[serde(default)]
     pub audio: String,
@@ -144,15 +150,35 @@ impl Command for Dictionary {
             .get(0)
             .and_then(|x| x.resolved.as_ref());
         let mut msg = CreateInteractionResponseData::default();
+
+        msg.content("Default message");
         if let Some(CommandDataOptionValue::String(word)) = mess {
-            let def_opt = get_dictionary_definition(word.as_str()).await;
+            let def_opt = dbg!(get_dictionary_definition(word.as_str()).await);
             let menu = MenuBuilder::new_paginator().timeout(Duration::from_secs(120));
             match def_opt {
                 Some(defs) => {
-                    menu.add_pages(defs.into_iter().map(|d| d.write_message()))
-                        .show_help()
-                        .build(ctx, command.channel_id)
-                        .await;
+                    if defs.len() > 1 {
+                        log_err(
+                            menu.add_pages(defs.into_iter().map(|d| d.write_page()))
+                                .show_help()
+                                .build(ctx, command.channel_id)
+                                .await,
+                        );
+
+                        msg.content("See above");
+                    } else if defs.len() == 1 {
+                        let def = &defs[0];
+                        log_err(
+                            command
+                                .channel_id
+                                .send_message(&ctx.http, |m| def.write_message(m))
+                                .await,
+                        );
+
+                        msg.content("See above");
+                    } else {
+                        msg.content("No definitions");
+                    }
                 }
                 None => {
                     msg.content("Could not find definition");
@@ -194,7 +220,7 @@ mod tests {
             defs,
             Some(vec![DictionaryDefinition {
                 word: "serenity".to_string(),
-                phonetic: "/səˈɹɛnɪti/".to_string(),
+                phonetic: Some("/səˈɹɛnɪti/".to_string()),
                 phonetics: vec![Pronunciation {
                     text: "/səˈɹɛnɪti/".to_string(),
                     audio: "https://api.dictionaryapi.dev/media/pronunciations/en/serenity-us.mp3"
