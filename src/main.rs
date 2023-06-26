@@ -13,7 +13,7 @@ mod utils;
 mod weather;
 
 use crate::utils::log_err;
-use command_responder::{CommandResponder, Command, StringContent};
+use command_responder::{Command, CommandResponder, StringContent};
 use geolocation::find_location;
 use lingua::Language;
 
@@ -21,6 +21,8 @@ use once_cell::sync::Lazy;
 use rand::Rng;
 use rand::{self, prelude::IteratorRandom};
 use regex::Regex;
+use serenity::collector::EventCollectorBuilder;
+use serenity::futures::StreamExt;
 use serenity::model::application::interaction::InteractionResponseType;
 use serenity::model::channel::AttachmentType;
 use serenity::model::prelude::command::{Command as SerenityCommand, CommandOptionType};
@@ -28,6 +30,7 @@ use serenity::model::prelude::interaction::application_command::{
     CommandDataOptionValue, ResolvedTarget,
 };
 use serenity::model::prelude::interaction::Interaction;
+use serenity::model::prelude::{AttachmentId, Event, EventType};
 use serenity::{
     builder::CreateMessage,
     framework::standard::Delimiter,
@@ -39,6 +42,7 @@ use std::collections::{HashMap, HashSet};
 use std::f32::consts::E;
 use std::io::{BufRead, BufReader};
 use std::sync::Arc;
+use std::time::Duration;
 use std::{env, fs::File};
 use translate::detection::detect_language;
 use typst_base::{CustomisePage, RenderErrors};
@@ -149,24 +153,22 @@ impl serenity::prelude::EventHandler for Handler {
 
         ctx.set_activity(Activity::playing("with Sakamoto")).await;
 
-        let _commands =SerenityCommand::set_global_application_commands(
-            &ctx.http, 
-            |commands| {
-                self.0.values().fold(
-                    commands, 
-                    |commands_so_far, command_to_add| {
-                        println!("Adding command {}", command_to_add.name());
-                        commands_so_far.create_application_command(
-                            |command| {
-                                command_to_add.options().iter().fold(
-                                    command
-                                        .name(command_to_add.name())
-                                        .description(command_to_add.description()),
-                                    |command_without_all_options, new_option| 
-                                    command_without_all_options.create_option(new_option),
-                    )
+        let _commands = SerenityCommand::set_global_application_commands(&ctx.http, |commands| {
+            self.0
+                .values()
+                .fold(commands, |commands_so_far, command_to_add| {
+                    println!("Adding command {}", command_to_add.name());
+                    commands_so_far.create_application_command(|command| {
+                        command_to_add.options().iter().fold(
+                            command
+                                .name(command_to_add.name())
+                                .description(command_to_add.description()),
+                            |command_without_all_options, new_option| {
+                                command_without_all_options.create_option(new_option)
+                            },
+                        )
+                    })
                 })
-            })
         })
         .await;
 
@@ -424,13 +426,16 @@ impl serenity::prelude::EventHandler for Handler {
         // .await;
         if let Err(e) = _commands {
             println!("Error making slash commands: {}", e);
+        } else {
+            println!("Number of actual commands is {}", _commands.unwrap().len());
         }
-        else{
-            println!(
-                "Number of actual commands is {}", _commands.unwrap().len()
-            );
-        }
-        println!("But the real actual numner of commands is {}",SerenityCommand::get_global_application_commands(&ctx.http).await.unwrap().len())
+        println!(
+            "But the real actual number of commands is {}",
+            SerenityCommand::get_global_application_commands(&ctx.http)
+                .await
+                .unwrap()
+                .len()
+        )
     }
 
     async fn message(&self, _ctx: Context, _new_message: Message) {
@@ -485,9 +490,9 @@ impl serenity::prelude::EventHandler for Handler {
                 }
             }
             MessageTypes::Typst(typst_src) => {
-                let _ = &_new_message
+                let res = _new_message
                     .channel_id
-                    .send_message(_ctx.http, |m| {
+                    .send_message(&_ctx.http, |m| {
                         match typst_main::render(TYPST_BASE.clone(), typst_src.as_str()) {
                             Ok(im) => m.add_file(AttachmentType::Bytes {
                                 data: im.into(),
@@ -497,6 +502,76 @@ impl serenity::prelude::EventHandler for Handler {
                         }
                     })
                     .await;
+
+                match res {
+                    Ok(mut typst_reply) => {
+                        let prev_img_id = match typst_reply.attachments.get(0) {
+                            Some(img) => img.id,
+                            None => {
+                                println!("No image!");
+                                AttachmentId(0)
+                            }
+                        };
+
+                        let builder = EventCollectorBuilder::new(&_ctx)
+                            .add_event_type(EventType::MessageUpdate)
+                            .add_message_id(&_new_message.id)
+                            .timeout(Duration::from_secs(180))
+                            .build();
+
+                        match builder {
+                            Ok(mut collector) => {
+                                while let Some(event) = collector.next().await {
+                                    match event.as_ref() {
+                                        // TODO should refactor get_message to work on edited messages too
+                                        Event::MessageUpdate(e) => {
+                                            if let Some(new_typst_content) = catch_typst_message(
+                                                e.content.clone().unwrap().as_str(),
+                                            ) {
+                                                typst_reply
+                                                    .edit(&_ctx, |m| {
+                                                        match typst_main::render(
+                                                            TYPST_BASE.clone(),
+                                                            new_typst_content.as_str(),
+                                                        ) {
+                                                            Ok(im) => {
+                                                                m.remove_existing_attachment(
+                                                                    prev_img_id,
+                                                                );
+                                                                m.attachment(
+                                                                    AttachmentType::Bytes {
+                                                                        data: im.into(),
+                                                                        filename: "Rendered.png"
+                                                                            .into(),
+                                                                    },
+                                                                )
+                                                            }
+                                                            Err(e) => m.content(format!(
+                                                                "```\n{}\n```\n{}",
+                                                                typst_src, e
+                                                            )),
+                                                        }
+                                                    })
+                                                    .await;
+                                            }
+                                        }
+                                        _ => {
+                                            println!("Somehow a different event got through!");
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                dbg!(e);
+                                println!("An error occurred!");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        dbg!(e);
+                        println!("An error occurred!");
+                    }
+                }
             }
         }
     }
