@@ -1,5 +1,7 @@
 //! Trait that responds to commands.
 
+use async_trait::async_trait;
+
 use serenity::{
     builder::{CreateApplicationCommandOption, CreateInteractionResponseData},
     client::Context,
@@ -44,16 +46,16 @@ impl CommandResponder for StringContent {
     }
 }
 
-pub trait Command: Sync + Send{
+#[async_trait]
+pub trait Command: Sync + Send {
     fn name(&self) -> &str;
     fn description(&self) -> &str;
     // fn get_options(&self, option: &mut CreateApplicationCommandOption)-> Vec<&mut CreateApplicationCommandOption>;
-    fn interaction<'a, 'b>(
+    async fn interaction<'b>(
         &self,
         ctx: &Context,
         command: &ApplicationCommandInteraction,
-        msg: &'a mut CreateInteractionResponseData<'b>
-    ) ->&'a mut CreateInteractionResponseData<'b>;
+    ) -> CreateInteractionResponseData<'b>;
 
     fn options(
         &self,

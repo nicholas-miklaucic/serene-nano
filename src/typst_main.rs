@@ -1,5 +1,6 @@
 use crate::command_responder::Command;
 use crate::config::{TYPST_CLOSE_DELIM, TYPST_OPEN_DELIM};
+use async_trait::async_trait;
 use regex::{escape, Regex};
 use serenity::http::multipart::Multipart;
 use serenity::model::application::command::CommandOptionType;
@@ -121,6 +122,7 @@ impl TypstEqtn {
     }
 }
 
+#[async_trait]
 impl Command for TypstEqtn {
     fn name(&self) -> &str {
         "typst_equation"
@@ -141,13 +143,12 @@ impl Command for TypstEqtn {
         }]
     }
 
-    fn interaction<'a, 'b>(
+    async fn interaction<'b>(
         &self,
         ctx: &Context,
         command: &ApplicationCommandInteraction,
-        msg: &'a mut CreateInteractionResponseData<'b>,
-    ) -> &'a mut CreateInteractionResponseData<'b> {
-        // let mut msg = serenity::builder::CreateInteractionResponseData::default();
+    ) -> CreateInteractionResponseData<'b> {
+        let mut msg = serenity::builder::CreateInteractionResponseData::default();
         let mess = command
             .data
             .options
@@ -163,13 +164,17 @@ impl Command for TypstEqtn {
                         .add_file(AttachmentType::Bytes {
                             data: im.into(),
                             filename: "Rendered.png".into(),
-                        })
+                        });
                 }
-                Err(e) => msg.content(format!("```\n{}\n```\n{}", source, e)),
+                Err(e) => {
+                    msg.content(format!("```\n{}\n```\n{}", source, e));
+                }
             }
         } else {
-            msg.content("Bigger oopsie")
+            msg.content("Bigger oopsie");
         }
+
+        msg
     }
 }
 
@@ -183,6 +188,7 @@ impl TypstRender {
     }
 }
 
+#[async_trait]
 impl Command for TypstRender {
     fn name(&self) -> &str {
         "typst_render"
@@ -201,12 +207,12 @@ impl Command for TypstRender {
                 .required(true)
         }]
     }
-    fn interaction<'a, 'b>(
+    async fn interaction<'b>(
         &self,
         ctx: &Context,
         command: &ApplicationCommandInteraction,
-        msg: &'a mut CreateInteractionResponseData<'b>,
-    ) -> &'a mut CreateInteractionResponseData<'b> {
+    ) -> CreateInteractionResponseData<'b> {
+        let mut msg = CreateInteractionResponseData::default();
         let mess = command
             .data
             .options
@@ -220,12 +226,16 @@ impl Command for TypstRender {
                         .add_file(AttachmentType::Bytes {
                             data: im.into(),
                             filename: "Rendered.png".into(),
-                        })
+                        });
                 }
-                Err(e) => msg.content(format!("```\n{}\n```\n{}", source, e)),
+                Err(e) => {
+                    msg.content(format!("```\n{}\n```\n{}", source, e));
+                }
             }
         } else {
-            msg.content("Bigger oopsie")
+            msg.content("Bigger oopsie");
         }
+
+        msg
     }
 }

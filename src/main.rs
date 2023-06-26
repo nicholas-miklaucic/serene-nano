@@ -1,6 +1,7 @@
 mod acarole;
 mod command_responder;
 mod config;
+mod dictionary;
 mod geolocation;
 mod poetry;
 mod rep;
@@ -12,6 +13,7 @@ mod typst_main;
 mod utils;
 mod weather;
 
+use crate::dictionary::Dictionary;
 use crate::utils::log_err;
 use command_responder::{Command, CommandResponder, StringContent};
 use geolocation::find_location;
@@ -76,6 +78,7 @@ impl Handler {
     fn new() -> Self {
         //Add commands here
         let h = Handler(HashMap::new())
+            .add(Box::new(Dictionary::default()))
             .add(Box::new(TypstEqtn::new(TYPST_BASE.clone())))
             .add(Box::new(TypstRender::new(TYPST_BASE.clone())));
 
@@ -580,13 +583,12 @@ impl serenity::prelude::EventHandler for Handler {
         if let Interaction::ApplicationCommand(command) = interaction {
             match self.0.get(command.data.name.as_str()) {
                 Some(my_command) => {
+                    let mut resp = my_command.interaction(&ctx, &command).await;
                     if let Err(_) = command
                         .create_interaction_response(&ctx.http, |response| {
                             response
                                 .kind(InteractionResponseType::ChannelMessageWithSource)
-                                .interaction_response_data(|msg| {
-                                    my_command.interaction(&ctx, &command, msg)
-                                })
+                                .interaction_response_data(|msg| &mut resp)
                         })
                         .await
                     {

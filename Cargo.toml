@@ -28,6 +28,7 @@ time = "0.3.22"
 image = { version = "0.24", default_features = false, features = ["png"] }
 bytemuck = "1.13.1"
 once_cell = "1.18.0"
+async-trait = "0.1.68"
 
 [dependencies.serenity]
 default-features = false
