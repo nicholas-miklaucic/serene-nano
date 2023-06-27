@@ -588,7 +588,10 @@ impl serenity::prelude::EventHandler for Handler {
                         .create_interaction_response(&ctx.http, |response| {
                             response
                                 .kind(InteractionResponseType::ChannelMessageWithSource)
-                                .interaction_response_data(|msg| &mut resp)
+                                .interaction_response_data(|msg| {
+                                    *msg = resp;
+                                    msg
+                                })
                         })
                         .await
                     {
