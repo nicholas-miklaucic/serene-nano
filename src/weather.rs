@@ -5,21 +5,25 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use anyhow::anyhow;
+use async_trait::async_trait;
+use poise::ChoiceParameter;
 use reqwest::RequestBuilder;
 use serde::{Deserialize, Serialize};
 use serenity::{
-    builder::CreateMessage, client::Context,
+    builder::CreateMessage,
     model::application::interaction::application_command::ApplicationCommandInteraction,
 };
 use serenity_additions::menu::{MenuBuilder, Page};
 
 use crate::{
+    command_responder::Command,
     geolocation::{find_location, Location},
-    utils::log_err,
+    utils::{log_err, Context, Error},
 };
 
 /// Groups of units for the weather.
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ChoiceParameter)]
 pub(crate) enum UnitSystem {
     /// The US imperial system.
     Imperial,
@@ -159,22 +163,11 @@ fn get_weather_icon_url(wmo_code: usize) -> String {
     format!("https://cdn.jsdelivr.net/gh/manifestinteractive/weather-underground-icons/dist/icons/white/png/128x128/{}.png", icon_name)
 }
 
-/// Gets the weather forecast given a name and units.
-#[allow(unused)]
-pub(crate) async fn get_weather_forecast_from_name(
-    name: &str,
-    units: &UnitSystem,
-) -> Option<WeatherResponse> {
-    let loc: Location = find_location(name).await?;
-    get_weather_forecast_from_loc(&loc, units).await
-}
-
 /// Reports the weather forecast at the given name in the given units.
 pub(crate) async fn weather_forecast_msg<'a, 'b>(
+    ctx: &Context<'_>,
     loc: &Location,
     forecast: &WeatherResponse,
-    command: &ApplicationCommandInteraction,
-    ctx: &Context,
 ) {
     let temp_code = forecast.hourly_units.apparent_temperature;
     let hourly = &forecast.hourly;
@@ -232,9 +225,34 @@ pub(crate) async fn weather_forecast_msg<'a, 'b>(
     log_err(
         menu.add_pages(pages)
             .show_help()
-            .build(ctx, command.channel_id)
+            .build(&ctx.serenity_context(), ctx.channel_id())
             .await,
     );
+}
+
+/// Get the weather for a specific location. Gives the forecast for the next
+/// several hours.
+#[poise::command(slash_command, required_permissions = "SEND_MESSAGES")]
+pub(crate) async fn weather(
+    ctx: Context<'_>,
+    #[description = "Location (e.g., \"Columbia\" or \"29210\", not \"Columbia, SC\") "]
+    location: String,
+    #[description = "Unit system"] units: Option<UnitSystem>,
+) -> Result<(), Error> {
+    let units = units.unwrap_or(UnitSystem::Metric);
+    let location = find_location(location.as_str())
+        .await
+        .ok_or(anyhow!("Could not find location: {}", location))?;
+    let forecast = get_weather_forecast_from_loc(&location, &units)
+        .await
+        .ok_or(anyhow!(
+            "Could not get weather forecast.\nLocation:{:?}\nUnits:{:?}",
+            location,
+            units
+        ))?;
+
+    weather_forecast_msg(&ctx, &location, &forecast).await;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -253,14 +271,6 @@ mod tests {
         };
 
         let forecast = get_weather_forecast_from_loc(&boston, &UnitSystem::Metric)
-            .await
-            .unwrap();
-        dbg!(&forecast);
-    }
-
-    #[tokio::test]
-    async fn test_weather_name() {
-        let forecast = get_weather_forecast_from_name("Georgetown", &UnitSystem::Metric)
             .await
             .unwrap();
         dbg!(&forecast);

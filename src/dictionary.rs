@@ -151,9 +151,14 @@ impl Command for Dictionary {
             .and_then(|x| x.resolved.as_ref());
         let mut msg = CreateInteractionResponseData::default();
 
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&command.data.options).unwrap()
+        );
+
         msg.content("Default message");
         if let Some(CommandDataOptionValue::String(word)) = mess {
-            let def_opt = dbg!(get_dictionary_definition(word.as_str()).await);
+            let def_opt = get_dictionary_definition(word.as_str()).await;
             let menu = MenuBuilder::new_paginator().timeout(Duration::from_secs(120));
             match def_opt {
                 Some(defs) => {
