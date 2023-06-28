@@ -23,6 +23,7 @@ use lingua::Language;
 
 use once_cell::sync::Lazy;
 use poise::serenity_prelude::GuildId;
+use poise::EventWrapper;
 use rand::Rng;
 use rand::{self, prelude::IteratorRandom};
 use regex::Regex;
@@ -51,6 +52,7 @@ use std::{env, fs::File};
 use translate::detection::detect_language;
 use typst_base::{CustomisePage, RenderErrors};
 use typst_main::{catch_typst_message, TypstEqtn, TypstRender};
+use utils::Error;
 use weather::WeatherResponse;
 
 #[macro_use]
@@ -64,30 +66,6 @@ use serenity::{
 };
 
 use crate::weather::{get_weather_forecast_from_loc, weather_forecast_msg, UnitSystem};
-
-struct Handler(HashMap<String, Box<dyn Command>>);
-
-impl Handler {
-    fn add(mut self, command: Box<dyn Command>) -> Self {
-        self.0.insert(command.name().into(), command);
-        self
-    }
-    fn new() -> Self {
-        //Add commands here
-        let h = Handler(HashMap::new())
-            .add(Box::new(Dictionary::default()))
-            .add(Box::new(TypstEqtn::new(TYPST_BASE.clone())))
-            .add(Box::new(TypstRender::new(TYPST_BASE.clone())));
-
-        println!("Number of commands: {}", h.0.len());
-
-        h
-    }
-
-    // fn get(&self, k:String)->Option<Box<dyn MyCommand>>{
-    //     self.0.get(&k)
-    // }
-}
 
 static TYPST_BASE: Lazy<Arc<typst_base::TypstEssentials>> =
     Lazy::new(|| Arc::new(typst_base::TypstEssentials::new()));
@@ -146,9 +124,11 @@ async fn get_message_type(message: &Message, ctx: &Context) -> MessageTypes {
     }
 }
 
-#[async_trait]
+struct Handler {}
+
+#[serenity::async_trait]
 impl serenity::prelude::EventHandler for Handler {
-    async fn message(&self, _ctx: Context, _new_message: Message) {
+    async fn message(&self, _ctx: serenity::prelude::Context, _new_message: Message) {
         match get_message_type(&_new_message, &_ctx).await {
             MessageTypes::Normal | MessageTypes::BotMessage => (),
             MessageTypes::Thank => {
@@ -208,7 +188,7 @@ impl serenity::prelude::EventHandler for Handler {
                                 data: im.into(),
                                 filename: "Rendered.png".into(),
                             }),
-                            Err(e) => m.content(format!("```\n{}\n```\n{}", typst_src, e)),
+                            Err(e) => m.content(format!("`n{}n`\n{}", typst_src, e)),
                         }
                     })
                     .await;
@@ -257,7 +237,7 @@ impl serenity::prelude::EventHandler for Handler {
                                                                 )
                                                             }
                                                             Err(e) => m.content(format!(
-                                                                "```\n{}\n```\n{}",
+                                                                "`n{}n`\n{}",
                                                                 typst_src, e
                                                             )),
                                                         }
@@ -287,6 +267,142 @@ impl serenity::prelude::EventHandler for Handler {
     }
 }
 
+async fn handle_message(_ctx: &Context, _new_message: &Message) -> Result<(), Error> {
+    match get_message_type(&_new_message, &_ctx).await {
+        MessageTypes::Normal | MessageTypes::BotMessage => (),
+        MessageTypes::Thank => {
+            if let Err(err) = rep::thank(&_ctx, &_new_message).await {
+                println!("Something went wrong! {}", err);
+            }
+        }
+        MessageTypes::GoodNano => {
+            log_err(
+                _new_message
+                    .reply(
+                        &_ctx,
+                        MessageBuilder::new()
+                            .push("https://i.imgur.com/bgiANhm.gif")
+                            .build(),
+                    )
+                    .await,
+            );
+        }
+        MessageTypes::BadNano => {
+            log_err(
+                _new_message
+                    .reply(
+                        &_ctx,
+                        MessageBuilder::new()
+                            .push("https://c.tenor.com/8QjR5hC91b0AAAAC/nichijou-nano.gif")
+                            .build(),
+                    )
+                    .await,
+            );
+        }
+        MessageTypes::Translate(other_language) => {
+            match translate::translate(
+                &_new_message.content,
+                Some(other_language),
+                Language::English,
+            )
+            .await
+            {
+                Some(result) => {
+                    if result == _new_message.content {
+                        println!("Translation detection failed");
+                        dbg!(result.clone());
+                    } else if let Err(why) = _new_message.reply(&_ctx, result).await {
+                        println!("Error sending message: {}", why);
+                    }
+                }
+                None => println!("Error translating"),
+            }
+        }
+        MessageTypes::Typst(typst_src) => {
+            let res = _new_message
+                .channel_id
+                .send_message(&_ctx.http, |m| {
+                    match typst_main::render(TYPST_BASE.clone(), typst_src.as_str()) {
+                        Ok(im) => m.add_file(AttachmentType::Bytes {
+                            data: im.into(),
+                            filename: "Rendered.png".into(),
+                        }),
+                        Err(e) => m.content(format!("`n{}n`\n{}", typst_src, e)),
+                    }
+                })
+                .await;
+
+            match res {
+                Ok(mut typst_reply) => {
+                    let prev_img_id = match typst_reply.attachments.get(0) {
+                        Some(img) => img.id,
+                        None => {
+                            println!("No image!");
+                            AttachmentId(0)
+                        }
+                    };
+
+                    let builder = EventCollectorBuilder::new(&_ctx)
+                        .add_event_type(EventType::MessageUpdate)
+                        .add_message_id(&_new_message.id)
+                        .timeout(Duration::from_secs(180))
+                        .build();
+
+                    match builder {
+                        Ok(mut collector) => {
+                            while let Some(event) = collector.next().await {
+                                match event.as_ref() {
+                                    // TODO should refactor get_message to work on edited messages too
+                                    Event::MessageUpdate(e) => {
+                                        if let Some(new_typst_content) =
+                                            catch_typst_message(e.content.clone().unwrap().as_str())
+                                        {
+                                            typst_reply
+                                                .edit(&_ctx, |m| {
+                                                    match typst_main::render(
+                                                        TYPST_BASE.clone(),
+                                                        new_typst_content.as_str(),
+                                                    ) {
+                                                        Ok(im) => {
+                                                            m.remove_existing_attachment(
+                                                                prev_img_id,
+                                                            );
+                                                            m.attachment(AttachmentType::Bytes {
+                                                                data: im.into(),
+                                                                filename: "Rendered.png".into(),
+                                                            })
+                                                        }
+                                                        Err(e) => m.content(format!(
+                                                            "`n{}n`\n{}",
+                                                            typst_src, e
+                                                        )),
+                                                    }
+                                                })
+                                                .await;
+                                        }
+                                    }
+                                    _ => {
+                                        println!("Somehow a different event got through!");
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            dbg!(e);
+                            println!("An error occurred!");
+                        }
+                    }
+                }
+                Err(e) => {
+                    dbg!(e);
+                    println!("An error occurred!");
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
     // Configure the client with your Discord bot token in the environment.
@@ -314,6 +430,15 @@ async fn main() {
                 prefix: env::var("PREFIX").ok(),
                 edit_tracker: Some(poise::EditTracker::for_timespan(Duration::from_secs(3600))),
                 ..Default::default()
+            },
+            event_handler: |ctx, event, framework_ctx, user| {
+                Box::pin(async move {
+                    if let poise::Event::Message { new_message } = event {
+                        handle_message(ctx, new_message).await?;
+                    }
+
+                    Ok(())
+                })
             },
             ..Default::default()
         })
