@@ -15,61 +15,40 @@ mod utils;
 mod weather;
 mod wiki;
 
-use crate::dictionary::Dictionary;
 use crate::utils::log_err;
-use command_responder::{Command, CommandResponder, StringContent};
-use geolocation::find_location;
+use command_responder::Command;
+
 use lingua::Language;
 
 use once_cell::sync::Lazy;
 use poise::serenity_prelude::GuildId;
-use poise::EventWrapper;
-use rand::Rng;
-use rand::{self, prelude::IteratorRandom};
+
 use regex::Regex;
 use serenity::collector::EventCollectorBuilder;
 use serenity::futures::StreamExt;
-use serenity::model::application::interaction::InteractionResponseType;
+
 use serenity::model::channel::AttachmentType;
-use serenity::model::prelude::command::{Command as SerenityCommand, CommandOptionType};
-use serenity::model::prelude::interaction::application_command::{
-    CommandDataOptionValue, ResolvedTarget,
-};
-use serenity::model::prelude::interaction::Interaction;
+
 use serenity::model::prelude::{AttachmentId, Event, EventType};
-use serenity::{
-    builder::CreateMessage,
-    model::prelude::Activity,
-    utils::{content_safe, Color, ContentSafeOptions, MessageBuilder},
-};
-use serenity_additions::RegisterAdditions;
-use std::collections::{HashMap, HashSet};
-use std::f32::consts::E;
-use std::io::{BufRead, BufReader};
+use serenity::{model::prelude::Activity, utils::MessageBuilder};
+
+use std::env;
 use std::sync::Arc;
 use std::time::Duration;
-use std::{env, fs::File};
 use translate::detection::detect_language;
-use typst_base::{CustomisePage, RenderErrors};
-use typst_main::{catch_typst_message, TypstEqtn, TypstRender};
+
+use typst_main::catch_typst_message;
 use utils::Error;
-use weather::WeatherResponse;
 
 #[macro_use]
 extern crate partial_application;
 
-use serenity::{
-    self, async_trait,
-    http::Http,
-    model::{channel::Message, gateway::Ready, id::UserId},
-    prelude::*,
-};
-
-use crate::weather::{get_weather_forecast_from_loc, weather_forecast_msg, UnitSystem};
+use serenity::{self, model::channel::Message, prelude::*};
 
 static TYPST_BASE: Lazy<Arc<typst_base::TypstEssentials>> =
     Lazy::new(|| Arc::new(typst_base::TypstEssentials::new()));
 
+#[derive(Debug, Clone)]
 enum MessageTypes {
     BotMessage,
     Thank,
@@ -110,22 +89,14 @@ async fn get_message_type(message: &Message, ctx: &Context) -> MessageTypes {
         return MessageTypes::Typst(s);
     }
 
-    //Translating has to be the last MessageTypes arm;
-    if message
-        .content
-        .starts_with(&env::var("PREFIX").unwrap_or_else(|_| "nano, ".to_string()))
-    {
-        match detect_language(&message.content) {
-            Some(Language::English) | None => MessageTypes::Normal,
-            Some(other) => MessageTypes::Translate(other),
-        }
-    } else {
-        MessageTypes::Normal
+    match detect_language(&message.content) {
+        Some(Language::English) | None => MessageTypes::Normal,
+        Some(other) => MessageTypes::Translate(other),
     }
 }
 
 async fn handle_message(_ctx: &Context, _new_message: &Message) -> Result<(), Error> {
-    match get_message_type(&_new_message, &_ctx).await {
+    match dbg!(get_message_type(dbg!(&_new_message), &_ctx).await) {
         MessageTypes::Normal | MessageTypes::BotMessage => (),
         MessageTypes::Thank => {
             if let Err(err) = rep::thank(&_ctx, &_new_message).await {
@@ -167,7 +138,7 @@ async fn handle_message(_ctx: &Context, _new_message: &Message) -> Result<(), Er
                 _new_message
                     .reply(
                         &_ctx,
-                        res.unwrap_or_else(|err| format!("Translation failed: {err}")),
+                        res.unwrap_or_else(|err| dbg!(format!("Translation failed: {err}"))),
                     )
                     .await,
             );
@@ -285,7 +256,7 @@ async fn main() {
                 edit_tracker: Some(poise::EditTracker::for_timespan(Duration::from_secs(3600))),
                 ..Default::default()
             },
-            event_handler: |ctx, event, framework_ctx, user| {
+            event_handler: |ctx, event, _framework_ctx, _user| {
                 Box::pin(async move {
                     if let poise::Event::Message { new_message } = event {
                         handle_message(ctx, new_message).await?;
