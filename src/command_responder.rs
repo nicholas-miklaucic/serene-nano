@@ -5,11 +5,8 @@ use async_trait::async_trait;
 use serenity::{
     builder::{CreateApplicationCommandOption, CreateInteractionResponseData},
     client::Context,
-    model::application::interaction::{
-        application_command::ApplicationCommandInteraction,
-    },
+    model::application::interaction::application_command::ApplicationCommandInteraction,
 };
-
 
 pub(crate) trait CommandResponder: Sync + Send {
     /// Responds to a command.
@@ -25,14 +22,6 @@ pub(crate) trait CommandResponder: Sync + Send {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct StringContent {
     content: String,
-}
-
-impl StringContent {
-    pub fn new<D: ToString>(content: D) -> Self {
-        Self {
-            content: content.to_string(),
-        }
-    }
 }
 
 impl CommandResponder for StringContent {

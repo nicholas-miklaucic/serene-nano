@@ -2,7 +2,7 @@
 
 extern crate redis;
 use crate::config::{REDIS_URL, THANK_COOLDOWN};
-use crate::utils::{Context, Error};
+use crate::utils::{log_err, Context, Error};
 use anyhow::anyhow;
 use redis::Commands;
 
@@ -36,38 +36,6 @@ pub(crate) fn top_rep(n: isize) -> redis::RedisResult<Vec<(String, usize)>> {
     let mut con = client.get_connection()?;
 
     con.zrevrange_withscores("reputation", 0, n - 1)
-}
-
-/// Given two users, as might be in a slash command, returns an output message to reply with.
-pub(crate) fn thank_slash(thanker: &User, thankee: &User) -> redis::RedisResult<String> {
-    let client = redis::Client::open(REDIS_URL)?;
-    let mut con = client.get_connection()?;
-
-    let on_cooldown: bool = con.exists(format!("on-cooldown:{}", thanker.id.0))?;
-    if can_thank(thanker, thankee) && !on_cooldown {
-        con.set_ex(format!("on-cooldown:{}", thanker.id.0), "", THANK_COOLDOWN)?;
-        let new_rep = thank_user(thankee, &mut con)?;
-
-        if new_rep == 1000 {
-            let fireworks_url = "https://tenor.com/view/happy-new-year2021version-gif-19777838";
-            Ok(format!(
-                "**{}** has helped **1000** people!!! In recognition of this achievement, {} can redeem these points for a book of your choosing: contact PollardsRho for more information. \n{}",
-                thankee.name, thankee.name, fireworks_url
-            ))
-        } else {
-            Ok(format!(
-                "Thanked **{}** (new rep: **{}**)\n",
-                thankee.name, new_rep
-            ))
-        }
-    } else if on_cooldown {
-        Ok(format!(
-            "You're still on cooldown: wait {} seconds, please!",
-            THANK_COOLDOWN
-        ))
-    } else {
-        Ok("That's not someone you're allowed to thank <-<".to_string())
-    }
 }
 
 /// Get the top users by reputation.
@@ -148,6 +116,15 @@ pub(crate) async fn thank(
         for user in &msg.mentions {
             if can_thank(&msg.author, user) {
                 let new_rep: usize = thank_user(user, &mut con)?;
+
+                if new_rep == 1000 {
+                    let fireworks_url =
+                        "https://tenor.com/view/happy-new-year2021version-gif-19777838";
+                    log_err(msg.reply(ctx, format!(
+                        "**{}** has helped **1000** people!!! In recognition of this achievement, {} can redeem these points for a book of your choosing: contact PollardsRho for more information. \n{}",
+                        user.name, user.name, fireworks_url
+                    )).await);
+                }
                 reps.push((&user.name, new_rep));
             }
         }

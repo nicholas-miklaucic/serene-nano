@@ -2,17 +2,11 @@
 
 use std::time::Duration;
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use serenity::{
-    builder::{CreateApplicationCommandOption, CreateInteractionResponseData, CreateMessage},
-    model::prelude::{
-        command::CommandOptionType, interaction::application_command::CommandDataOptionValue,
-    },
-};
+use serenity::{builder::CreateMessage, http::CacheHttp};
 use serenity_additions::menu::{MenuBuilder, Page};
 
-use crate::{command_responder::Command, utils::log_err};
+use crate::utils::{Context, Error};
 
 /// Base URL for API.
 const API_URL: &str = "https://api.dictionaryapi.dev/api/v2/entries/en";
@@ -126,91 +120,42 @@ async fn get_dictionary_definition(word: &str) -> Option<Vec<DictionaryDefinitio
     defs
 }
 
-#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub(crate) struct Dictionary {}
+/// Define the given word using Wiktionary.
+#[poise::command(
+    slash_command,
+    prefix_command,
+    track_edits,
+    invoke_on_edit,
+    reuse_response,
+    track_deletion
+)]
+pub(crate) async fn define(
+    ctx: Context<'_>,
+    #[description = "The word to define. Prefer headwords: \"serene\" instead of \"serenely.\""]
+    word: String,
+) -> Result<(), Error> {
+    let defs_opt = get_dictionary_definition(word.as_str()).await;
+    let menu = MenuBuilder::new_paginator().timeout(Duration::from_secs(120));
 
-#[async_trait]
-impl Command for Dictionary {
-    fn name(&self) -> &str {
-        "define"
-    }
-
-    fn description(&self) -> &str {
-        "Gets the dictionary definition for a word"
-    }
-
-    async fn interaction<'b>(
-        &self,
-        ctx: &serenity::prelude::Context,
-        command: &serenity::model::prelude::interaction::application_command::ApplicationCommandInteraction,
-    ) -> serenity::builder::CreateInteractionResponseData<'b> {
-        let mess = command
-            .data
-            .options
-            .get(0)
-            .and_then(|x| x.resolved.as_ref());
-        let mut msg = CreateInteractionResponseData::default();
-
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&command.data.options).unwrap()
-        );
-
-        msg.content("Default message");
-        if let Some(CommandDataOptionValue::String(word)) = mess {
-            let def_opt = get_dictionary_definition(word.as_str()).await;
-            let menu = MenuBuilder::new_paginator().timeout(Duration::from_secs(120));
-            match def_opt {
-                Some(defs) => {
-                    if defs.len() > 1 {
-                        log_err(
-                            menu.add_pages(defs.into_iter().map(|d| d.write_page()))
-                                .show_help()
-                                .build(ctx, command.channel_id)
-                                .await,
-                        );
-
-                        msg.content("See above");
-                    } else if defs.len() == 1 {
-                        let def = &defs[0];
-                        log_err(
-                            command
-                                .channel_id
-                                .send_message(&ctx.http, |m| def.write_message(m))
-                                .await,
-                        );
-
-                        msg.content("See above");
-                    } else {
-                        msg.content("No definitions");
-                    }
-                }
-                None => {
-                    msg.content("Could not find definition");
-                }
-            }
-        } else {
-            msg.content("AAH! Something terrible happened.");
+    match defs_opt {
+        Some(defs) if defs.len() > 1 => {
+            menu.add_pages(defs.into_iter().map(|d| d.write_page()))
+                .show_help()
+                .build(ctx.serenity_context(), ctx.channel_id())
+                .await?;
         }
+        Some(defs) if defs.len() == 1 => {
+            let def = &defs[0];
+            ctx.channel_id()
+                .send_message(&ctx.http(), |m| def.write_message(m))
+                .await?;
+        }
+        _other => {
+            ctx.say("No definitions found. Try the word's root: for example, \"serene\" instead of \"serenely.\" ").await?;
+        }
+    };
 
-        msg
-    }
-
-    fn options(
-        &self,
-    ) -> Vec<
-        fn(
-            &mut serenity::builder::CreateApplicationCommandOption,
-        ) -> &mut serenity::builder::CreateApplicationCommandOption,
-    > {
-        vec![|option: &mut CreateApplicationCommandOption| {
-            option
-                .name("word")
-                .description("Base word (e.g., \"serene\" instead of \"serenely\")")
-                .kind(CommandOptionType::String)
-                .required(true)
-        }]
-    }
+    Ok(())
 }
 
 #[cfg(test)]

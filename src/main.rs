@@ -3,10 +3,8 @@ mod command_responder;
 mod config;
 mod dictionary;
 mod geolocation;
-mod poetry;
 mod rep;
 mod say;
-mod set;
 mod trace_moe;
 mod translate;
 mod typst_base;
@@ -16,7 +14,6 @@ mod weather;
 mod wiki;
 
 use crate::utils::log_err;
-use command_responder::Command;
 
 use lingua::Language;
 
@@ -39,9 +36,6 @@ use translate::detection::detect_language;
 
 use typst_main::catch_typst_message;
 use utils::Error;
-
-#[macro_use]
-extern crate partial_application;
 
 use serenity::{self, model::channel::Message, prelude::*};
 
@@ -96,10 +90,10 @@ async fn get_message_type(message: &Message, ctx: &Context) -> MessageTypes {
 }
 
 async fn handle_message(_ctx: &Context, _new_message: &Message) -> Result<(), Error> {
-    match dbg!(get_message_type(dbg!(&_new_message), &_ctx).await) {
+    match get_message_type(_new_message, _ctx).await {
         MessageTypes::Normal | MessageTypes::BotMessage => (),
         MessageTypes::Thank => {
-            if let Err(err) = rep::thank(&_ctx, &_new_message).await {
+            if let Err(err) = rep::thank(_ctx, _new_message).await {
                 println!("Something went wrong! {}", err);
             }
         }
@@ -167,9 +161,9 @@ async fn handle_message(_ctx: &Context, _new_message: &Message) -> Result<(), Er
                         }
                     };
 
-                    let builder = EventCollectorBuilder::new(&_ctx)
+                    let builder = EventCollectorBuilder::new(_ctx)
                         .add_event_type(EventType::MessageUpdate)
-                        .add_message_id(&_new_message.id)
+                        .add_message_id(_new_message.id)
                         .timeout(Duration::from_secs(180))
                         .build();
 
@@ -182,28 +176,33 @@ async fn handle_message(_ctx: &Context, _new_message: &Message) -> Result<(), Er
                                         if let Some(new_typst_content) =
                                             catch_typst_message(e.content.clone().unwrap().as_str())
                                         {
-                                            typst_reply
-                                                .edit(&_ctx, |m| {
-                                                    match typst_main::render(
-                                                        TYPST_BASE.clone(),
-                                                        new_typst_content.as_str(),
-                                                    ) {
-                                                        Ok(im) => {
-                                                            m.remove_existing_attachment(
-                                                                prev_img_id,
-                                                            );
-                                                            m.attachment(AttachmentType::Bytes {
-                                                                data: im.into(),
-                                                                filename: "Rendered.png".into(),
-                                                            })
+                                            log_err(
+                                                typst_reply
+                                                    .edit(&_ctx, |m| {
+                                                        match typst_main::render(
+                                                            TYPST_BASE.clone(),
+                                                            new_typst_content.as_str(),
+                                                        ) {
+                                                            Ok(im) => {
+                                                                m.remove_existing_attachment(
+                                                                    prev_img_id,
+                                                                );
+                                                                m.attachment(
+                                                                    AttachmentType::Bytes {
+                                                                        data: im.into(),
+                                                                        filename: "Rendered.png"
+                                                                            .into(),
+                                                                    },
+                                                                )
+                                                            }
+                                                            Err(e) => m.content(format!(
+                                                                "`n{}n`\n{}",
+                                                                typst_src, e
+                                                            )),
                                                         }
-                                                        Err(e) => m.content(format!(
-                                                            "`n{}n`\n{}",
-                                                            typst_src, e
-                                                        )),
-                                                    }
-                                                })
-                                                .await;
+                                                    })
+                                                    .await,
+                                            );
                                         }
                                     }
                                     _ => {
@@ -243,13 +242,14 @@ async fn main() {
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
             commands: vec![
+                ask::ask(),
+                dictionary::define(),
+                rep::leaderboard(),
+                rep::reputation(),
+                say::say(),
+                trace_moe::find_anime_source(),
                 weather::weather(),
                 wiki::wiki(),
-                say::say(),
-                ask::ask(),
-                trace_moe::find_anime_source(),
-                rep::reputation(),
-                rep::leaderboard(),
             ],
             prefix_options: poise::PrefixFrameworkOptions {
                 prefix: env::var("PREFIX").ok(),

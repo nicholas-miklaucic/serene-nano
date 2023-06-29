@@ -34,11 +34,6 @@ pub(crate) const AVAILABLE_LANGS: [Language; 25] = [
     Language::Chinese,
 ];
 
-/// Gets the name of the language.
-pub(crate) fn lang_name(lang: &Language) -> String {
-    format!("{:?}", lang)
-}
-
 /// Converts to DeepL SourceLanguage
 pub(crate) fn lingua_to_deepl_source(lang: Language) -> SourceLanguage {
     match lang {
@@ -103,19 +98,4 @@ pub(crate) fn lingua_to_deepl_target(lang: Language) -> TargetLanguage {
         Language::Ukrainian => TargetLanguage::Uk,
         _ => TargetLanguage::En,
     }
-}
-
-/// Gets the available language names.
-pub(crate) fn available_lang_names() -> Vec<String> {
-    AVAILABLE_LANGS.iter().map(lang_name).collect()
-}
-
-/// Gets the language corresponding to the given name, failing if no such name exists.
-pub(crate) fn get_language(name: &str) -> Option<Language> {
-    for (lang, lang_name) in AVAILABLE_LANGS.iter().zip(available_lang_names().iter()) {
-        if name == lang_name {
-            return Some(lang.clone());
-        }
-    }
-    None
 }

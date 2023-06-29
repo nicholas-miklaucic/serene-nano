@@ -1,7 +1,6 @@
 use comemo::Prehashed;
 use std::convert::TryInto;
 use std::sync::Arc;
-use std::sync::RwLock;
 use typst::diag::SourceError;
 use typst::eval::Library;
 use typst::font::{Font, FontBook};
@@ -16,7 +15,6 @@ pub(crate) trait Preamble {
 //TODO, allow changing the customisation
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum PageSize {
-    Default,
     Auto,
 }
 
@@ -24,7 +22,6 @@ impl Preamble for PageSize {
     fn preamble(&self) -> String {
         match &self {
             PageSize::Auto => "#set page(width: auto, height: auto, margin: 10pt)\n".to_string(),
-            PageSize::Default => "".to_string(),
         }
     }
 }
@@ -32,17 +29,16 @@ impl Preamble for PageSize {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Theme {
     Dark,
-    Light,
 }
 
 impl Preamble for Theme {
     fn preamble(&self) -> String {
         match self {
-            Theme::Light => "
-#let bg = rgb(219, 222, 225)
-#let fg = rgb(49, 51, 56)
-"
-            .to_string(),
+            //             Theme::Light => "
+            // #let bg = rgb(219, 222, 225)
+            // #let fg = rgb(49, 51, 56)
+            // "
+            //            .to_string(),
             Theme::Dark => "
 #let fg = rgb(219, 222, 225)
 #let bg = rgb(49, 51, 56)"
@@ -56,14 +52,6 @@ pub(crate) struct CustomisePage {
     pub(crate) theme: Theme,
 }
 
-impl CustomisePage {
-    fn change(&mut self, other: CustomisePage) {
-        //TODO wtf, how do i do this without memory crimes?!
-        self.page_size = other.page_size;
-        self.theme = other.theme;
-    }
-}
-
 impl Preamble for CustomisePage {
     fn preamble(&self) -> String {
         self.page_size.preamble() + self.theme.preamble().as_str()
@@ -74,7 +62,7 @@ pub(crate) struct TypstEssentials {
     library: Prehashed<Library>,
     fontbook: Prehashed<FontBook>,
     fonts: Vec<Font>,
-    choices: RwLock<CustomisePage>,
+    choices: CustomisePage,
 }
 
 fn get_fonts() -> Vec<Font> {
@@ -100,23 +88,14 @@ impl TypstEssentials {
             choices: CustomisePage {
                 page_size: PageSize::Auto,
                 theme: Theme::Dark,
-            }
-            .into(),
+            },
         }
-    }
-
-    pub(crate) fn customise(&self, new_themes: CustomisePage) {
-        self.choices.write().unwrap().change(new_themes)
-    }
-
-    pub(crate) fn get_choices(&self) -> CustomisePage {
-        self.choices.read().unwrap().clone()
     }
 }
 
 impl Preamble for TypstEssentials {
     fn preamble(&self) -> String {
-        self.choices.read().unwrap().preamble()
+        self.choices.preamble()
             + "
 #set text(
   font: (
@@ -230,9 +209,34 @@ impl typst::World for ToCompile {
     }
 }
 
+#[derive(Debug, Clone)]
 pub(crate) enum RenderErrors {
-    SourceError(Box<Vec<SourceError>>),
+    SourceError(Vec<SourceError>),
     NoPageError,
     PageSizeTooBig,
-    NotSourceError,
 }
+
+impl std::fmt::Display for RenderErrors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RenderErrors::NoPageError => {
+                write!(f, "No pages found...")
+            }
+            RenderErrors::PageSizeTooBig => {
+                write!(f, "Page too big...")
+            }
+            RenderErrors::SourceError(err) => {
+                write!(
+                    f,
+                    "{}",
+                    err.iter()
+                        .fold(String::from("Syntax error(s):\n"), |acc, se| acc
+                            + se.message.as_str()
+                            + "\n")
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for RenderErrors {}

@@ -10,13 +10,10 @@ use anyhow::anyhow;
 use poise::ChoiceParameter;
 use reqwest::RequestBuilder;
 use serde::{Deserialize, Serialize};
-use serenity::{
-    builder::CreateMessage,
-};
+use serenity::builder::CreateMessage;
 use serenity_additions::menu::{MenuBuilder, Page};
 
 use crate::{
-    command_responder::Command,
     geolocation::{find_location, Location},
     utils::{log_err, Context, Error},
 };
@@ -224,7 +221,7 @@ pub(crate) async fn weather_forecast_msg<'a, 'b>(
     log_err(
         menu.add_pages(pages)
             .show_help()
-            .build(&ctx.serenity_context(), ctx.channel_id())
+            .build(ctx.serenity_context(), ctx.channel_id())
             .await,
     );
 }

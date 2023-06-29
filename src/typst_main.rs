@@ -8,8 +8,6 @@ use std::io::Cursor;
 use std::sync::Arc;
 use typst::geom::RgbaColor;
 
-use typst_library::text::lorem;
-
 use crate::typst_base::{
     determine_pixels_per_point, Preamble, RenderErrors, ToCompile, TypstEssentials,
 };
@@ -23,11 +21,6 @@ use serenity::{
     },
     prelude::Context,
 };
-
-pub(crate) fn my_lorem(num: usize) -> String {
-    //Testing if I got the typst library in properly
-    lorem(num).to_string()
-}
 
 /// Returns None if a message is not identifiable as Typst. If the message is
 /// identifiable as Typst, then the cleaned message suitable for Typst rendering
@@ -52,15 +45,12 @@ pub(crate) fn catch_typst_message(msg: &str) -> Option<String> {
     }
 }
 
-pub(crate) fn render(
-    typst_base: Arc<TypstEssentials>,
-    source: &str,
-) -> Result<Vec<u8>, RenderErrors> {
+pub(crate) fn render(typst_base: Arc<TypstEssentials>, source: &str) -> anyhow::Result<Vec<u8>> {
     let mut source = source.to_owned();
 
     source.insert_str(0, typst_base.preamble().as_str());
     let to_compile = ToCompile::new(typst_base, source.clone());
-    let document = typst::compile(&to_compile).map_err(|err| RenderErrors::SourceError(err))?;
+    let document = typst::compile(&to_compile).map_err(|errs| RenderErrors::SourceError(*errs))?;
 
     let frame = document.pages.get(0).ok_or(RenderErrors::NoPageError)?;
 
@@ -83,43 +73,11 @@ pub(crate) fn render(
 
     let image = writer.into_inner();
 
-    return Ok(image);
-}
-
-impl std::fmt::Display for RenderErrors {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RenderErrors::NoPageError => {
-                write!(f, "No pages found...")
-            }
-            RenderErrors::NotSourceError => {
-                write!(f, "unreachable")
-            }
-            RenderErrors::PageSizeTooBig => {
-                write!(f, "Page too big...")
-            }
-            RenderErrors::SourceError(err) => {
-                write!(
-                    f,
-                    "{}",
-                    err.iter()
-                        .fold(String::from("Syntax error(s):\n"), |acc, se| acc
-                            + se.message.as_str()
-                            + "\n")
-                )
-            }
-        }
-    }
+    Ok(image)
 }
 
 pub(crate) struct TypstEqtn {
     base: Arc<TypstEssentials>,
-}
-
-impl TypstEqtn {
-    pub(crate) fn new(typst_base: Arc<TypstEssentials>) -> TypstEqtn {
-        TypstEqtn { base: typst_base }
-    }
 }
 
 #[async_trait]
@@ -180,12 +138,6 @@ impl Command for TypstEqtn {
 
 pub(crate) struct TypstRender {
     base: Arc<TypstEssentials>,
-}
-
-impl TypstRender {
-    pub(crate) fn new(typst_base: Arc<TypstEssentials>) -> TypstRender {
-        TypstRender { base: typst_base }
-    }
 }
 
 #[async_trait]
