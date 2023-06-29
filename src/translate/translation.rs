@@ -1,8 +1,12 @@
 //! DeepL translation API wrapper.
 
-use deepl_openapi::apis::{
-    configuration::{ApiKey, Configuration},
-    translate_text_api::translate_text,
+use anyhow::{anyhow, Result};
+use deepl_openapi::{
+    apis::{
+        configuration::{ApiKey, Configuration},
+        translate_text_api::translate_text,
+    },
+    models::TranslateText200ResponseTranslationsInner,
 };
 use lingua::Language;
 
@@ -16,7 +20,7 @@ pub(crate) async fn translate(
     msg: &str,
     source: Option<Language>,
     target: Language,
-) -> Option<String> {
+) -> Result<String> {
     let client = reqwest::Client::new();
 
     // setting this to an invalid key will trigger a request error which saves me having to make a
@@ -36,7 +40,7 @@ pub(crate) async fn translate(
         }),
     };
 
-    let result = translate_text(
+    let result: anyhow::Result<TranslateText200ResponseTranslationsInner> = translate_text(
         &config,
         vec![msg.to_string()],
         lingua_to_deepl_target(target),
@@ -52,8 +56,12 @@ pub(crate) async fn translate(
         None,
     )
     .await
-    .ok()
-    .and_then(|r| r.translations.and_then(|v| v.get(0).cloned()));
+    .map_err(|e| e.into())
+    .and_then(|r| {
+        r.translations
+            .ok_or(anyhow!("No translations available"))
+            .and_then(|v| v.get(0).ok_or(anyhow!("Translation list empty")).cloned())
+    });
 
     result.map(|res| match res.detected_source_language {
         Some(src) => {
