@@ -6,10 +6,10 @@ use serenity::{
     builder::{CreateApplicationCommandOption, CreateInteractionResponseData},
     client::Context,
     model::application::interaction::{
-        application_command::ApplicationCommandInteraction, Interaction,
+        application_command::ApplicationCommandInteraction,
     },
 };
-use typst::diag::StrResult;
+
 
 pub(crate) trait CommandResponder: Sync + Send {
     /// Responds to a command.

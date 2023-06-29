@@ -6,13 +6,12 @@ use std::{
 };
 
 use anyhow::anyhow;
-use async_trait::async_trait;
+
 use poise::ChoiceParameter;
 use reqwest::RequestBuilder;
 use serde::{Deserialize, Serialize};
 use serenity::{
     builder::CreateMessage,
-    model::application::interaction::application_command::ApplicationCommandInteraction,
 };
 use serenity_additions::menu::{MenuBuilder, Page};
 

@@ -2,12 +2,12 @@ use crate::command_responder::Command;
 use crate::config::{TYPST_CLOSE_DELIM, TYPST_OPEN_DELIM};
 use async_trait::async_trait;
 use regex::{escape, Regex};
-use serenity::http::multipart::Multipart;
+
 use serenity::model::application::command::CommandOptionType;
 use std::io::Cursor;
 use std::sync::Arc;
 use typst::geom::RgbaColor;
-use typst::syntax::ErrorPos;
+
 use typst_library::text::lorem;
 
 use crate::typst_base::{
@@ -145,7 +145,7 @@ impl Command for TypstEqtn {
 
     async fn interaction<'b>(
         &self,
-        ctx: &Context,
+        _ctx: &Context,
         command: &ApplicationCommandInteraction,
     ) -> CreateInteractionResponseData<'b> {
         let mut msg = serenity::builder::CreateInteractionResponseData::default();
@@ -209,7 +209,7 @@ impl Command for TypstRender {
     }
     async fn interaction<'b>(
         &self,
-        ctx: &Context,
+        _ctx: &Context,
         command: &ApplicationCommandInteraction,
     ) -> CreateInteractionResponseData<'b> {
         let mut msg = CreateInteractionResponseData::default();

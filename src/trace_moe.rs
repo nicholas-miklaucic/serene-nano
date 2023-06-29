@@ -1,8 +1,8 @@
 //! Functionality to get the sources of GIFs in a message.
 
-use poise::send_application_reply;
+
 use regex::Regex;
-use serenity::{builder::CreateInteractionResponseData, model::channel::Message};
+use serenity::{model::channel::Message};
 
 use crate::utils::{Context, Error};
 
