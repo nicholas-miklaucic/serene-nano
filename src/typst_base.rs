@@ -1,12 +1,14 @@
 use comemo::Prehashed;
 use std::convert::TryInto;
+use std::path::Path;
 use std::sync::Arc;
-use typst::diag::SourceError;
+use typst::diag::{FileResult, SourceError};
 use typst::eval::Library;
+use typst::file::FileId;
 use typst::font::{Font, FontBook};
 use typst::geom::Size;
-use typst::syntax::{Source, SourceId};
-use typst::util::Buffer;
+use typst::syntax::Source;
+use typst::util::Bytes;
 
 pub(crate) trait Preamble {
     fn preamble(&self) -> String;
@@ -71,7 +73,7 @@ fn get_fonts() -> Vec<Font> {
         .map(Result::unwrap)
         .flat_map(|entry| {
             let bytes = std::fs::read(entry.path()).unwrap();
-            let buffer = Buffer::from(bytes);
+            let buffer = Bytes::from(bytes);
             Font::iter(buffer)
         })
         .collect()
@@ -163,7 +165,7 @@ pub(crate) struct ToCompile {
 }
 
 fn string2source(source: String) -> Source {
-    Source::new(SourceId::from_u16(0), "not needed".as_ref(), source)
+    Source::new(FileId::new(None, Path::new("tmp/")), source)
 }
 
 impl ToCompile {
@@ -181,8 +183,8 @@ impl typst::World for ToCompile {
         &self.typst_essentials.fontbook
     }
 
-    fn file(&self, path: &std::path::Path) -> typst::diag::FileResult<Buffer> {
-        Err(typst::diag::FileError::NotFound(path.into()))
+    fn file(&self, _id: FileId) -> FileResult<Bytes> {
+        Err(typst::diag::FileError::Other)
     }
 
     fn font(&self, id: usize) -> Option<Font> {
@@ -191,15 +193,13 @@ impl typst::World for ToCompile {
     fn library(&self) -> &Prehashed<Library> {
         &self.typst_essentials.library
     }
-    fn main(&self) -> &Source {
-        &self.source
-    }
-    fn resolve(&self, path: &std::path::Path) -> typst::diag::FileResult<SourceId> {
-        Err(typst::diag::FileError::NotFound(path.into()))
+
+    fn main(&self) -> Source {
+        self.source.clone()
     }
 
-    fn source(&self, _id: SourceId) -> &Source {
-        &self.source
+    fn source(&self, _id: FileId) -> FileResult<Source> {
+        Ok(self.source.clone())
     }
     fn today(&self, offset: Option<i64>) -> Option<typst::eval::Datetime> {
         let offset = offset.unwrap_or(0);

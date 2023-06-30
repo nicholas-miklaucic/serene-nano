@@ -1,25 +1,12 @@
-use crate::command_responder::Command;
 use crate::config::{TYPST_CLOSE_DELIM, TYPST_OPEN_DELIM};
-use async_trait::async_trait;
 use regex::{escape, Regex};
 
-use serenity::model::application::command::CommandOptionType;
 use std::io::Cursor;
 use std::sync::Arc;
 use typst::geom::RgbaColor;
 
 use crate::typst_base::{
     determine_pixels_per_point, Preamble, RenderErrors, ToCompile, TypstEssentials,
-};
-
-use serenity::{
-    builder::{CreateApplicationCommandOption, CreateInteractionResponseData},
-    model::{
-        application::interaction::application_command::CommandDataOptionValue,
-        channel::AttachmentType,
-        prelude::interaction::application_command::ApplicationCommandInteraction,
-    },
-    prelude::Context,
 };
 
 /// Returns None if a message is not identifiable as Typst. If the message is
@@ -74,120 +61,4 @@ pub(crate) fn render(typst_base: Arc<TypstEssentials>, source: &str) -> anyhow::
     let image = writer.into_inner();
 
     Ok(image)
-}
-
-pub(crate) struct TypstEqtn {
-    base: Arc<TypstEssentials>,
-}
-
-#[async_trait]
-impl Command for TypstEqtn {
-    fn name(&self) -> &str {
-        "typst_equation"
-    }
-    fn description(&self) -> &str {
-        "Renders equations using typst"
-    }
-
-    fn options(
-        &self,
-    ) -> Vec<fn(&mut CreateApplicationCommandOption) -> &mut CreateApplicationCommandOption> {
-        vec![|option: &mut CreateApplicationCommandOption| {
-            option
-                .name("code")
-                .description("Equation to render")
-                .kind(CommandOptionType::String)
-                .required(true)
-        }]
-    }
-
-    async fn interaction<'b>(
-        &self,
-        _ctx: &Context,
-        command: &ApplicationCommandInteraction,
-    ) -> CreateInteractionResponseData<'b> {
-        let mut msg = serenity::builder::CreateInteractionResponseData::default();
-        let mess = command
-            .data
-            .options
-            .get(0)
-            .and_then(|x| x.resolved.as_ref());
-
-        if let Some(CommandDataOptionValue::String(source)) = mess {
-            let source_with_limiters = format!("$\n{}\n$", source);
-
-            match render(self.base.clone(), source_with_limiters.as_str()) {
-                Ok(im) => {
-                    msg.content(format!("```\n{}\n```", source))
-                        .add_file(AttachmentType::Bytes {
-                            data: im.into(),
-                            filename: "Rendered.png".into(),
-                        });
-                }
-                Err(e) => {
-                    msg.content(format!("```\n{}\n```\n{}", source, e));
-                }
-            }
-        } else {
-            msg.content("Bigger oopsie");
-        }
-
-        msg
-    }
-}
-
-pub(crate) struct TypstRender {
-    base: Arc<TypstEssentials>,
-}
-
-#[async_trait]
-impl Command for TypstRender {
-    fn name(&self) -> &str {
-        "typst_render"
-    }
-    fn description(&self) -> &str {
-        "renders with typst"
-    }
-    fn options(
-        &self,
-    ) -> Vec<fn(&mut CreateApplicationCommandOption) -> &mut CreateApplicationCommandOption> {
-        vec![|option: &mut CreateApplicationCommandOption| {
-            option
-                .name("code")
-                .description("typst code to render")
-                .kind(CommandOptionType::String)
-                .required(true)
-        }]
-    }
-    async fn interaction<'b>(
-        &self,
-        _ctx: &Context,
-        command: &ApplicationCommandInteraction,
-    ) -> CreateInteractionResponseData<'b> {
-        let mut msg = CreateInteractionResponseData::default();
-        let mess = command
-            .data
-            .options
-            .get(0)
-            .and_then(|x| x.resolved.as_ref());
-
-        if let Some(CommandDataOptionValue::String(source)) = mess {
-            match render(self.base.clone(), source.as_str()) {
-                Ok(im) => {
-                    msg.content(format!("```\n{}\n```", source))
-                        .add_file(AttachmentType::Bytes {
-                            data: im.into(),
-                            filename: "Rendered.png".into(),
-                        });
-                }
-                Err(e) => {
-                    msg.content(format!("```\n{}\n```\n{}", source, e));
-                }
-            }
-        } else {
-            msg.content("Bigger oopsie");
-        }
-
-        msg
-    }
 }

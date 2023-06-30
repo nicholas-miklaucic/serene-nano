@@ -1,5 +1,4 @@
 mod ask;
-mod command_responder;
 mod config;
 mod dictionary;
 mod geolocation;

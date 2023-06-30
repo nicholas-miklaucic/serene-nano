@@ -44,7 +44,7 @@ pub(crate) async fn translate(
         &config,
         vec![msg.to_string()],
         lingua_to_deepl_target(target),
-        source.clone().map(lingua_to_deepl_source),
+        source.map(lingua_to_deepl_source),
         None,
         None,
         None,
