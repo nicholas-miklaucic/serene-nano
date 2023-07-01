@@ -152,7 +152,7 @@ async fn handle_message(_ctx: &Context, _new_message: &Message) -> Result<(), Er
 
             match res {
                 Ok(mut typst_reply) => {
-                    let prev_img_id = match typst_reply.attachments.get(0) {
+                    let mut prev_img_id = match typst_reply.attachments.get(0) {
                         Some(img) => img.id,
                         None => {
                             println!("No image!");
@@ -185,14 +185,12 @@ async fn handle_message(_ctx: &Context, _new_message: &Message) -> Result<(), Er
                                                             Ok(im) => {
                                                                 m.remove_existing_attachment(
                                                                     prev_img_id,
-                                                                );
-                                                                m.attachment(
-                                                                    AttachmentType::Bytes {
-                                                                        data: im.into(),
-                                                                        filename: "Rendered.png"
-                                                                            .into(),
-                                                                    },
                                                                 )
+                                                                .content("")
+                                                                .attachment(AttachmentType::Bytes {
+                                                                    data: im.into(),
+                                                                    filename: "Rendered.png".into(),
+                                                                })
                                                             }
                                                             Err(e) => m.content(format!(
                                                                 "`n{}n`\n{}",
@@ -202,6 +200,13 @@ async fn handle_message(_ctx: &Context, _new_message: &Message) -> Result<(), Er
                                                     })
                                                     .await,
                                             );
+                                            prev_img_id = match typst_reply.attachments.get(0) {
+                                                Some(img) => img.id,
+                                                None => {
+                                                    println!("No image!");
+                                                    AttachmentId(0)
+                                                }
+                                            };
                                         }
                                     }
                                     _ => {

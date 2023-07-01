@@ -165,7 +165,7 @@ pub(crate) struct ToCompile {
 }
 
 fn string2source(source: String) -> Source {
-    Source::new(FileId::new(None, Path::new("/")), source)
+    Source::new(FileId::detached(), source)
 }
 
 impl ToCompile {

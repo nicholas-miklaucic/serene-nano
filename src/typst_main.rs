@@ -33,7 +33,7 @@ pub(crate) fn catch_typst_message(msg: &str) -> Option<String> {
 }
 
 pub(crate) fn render(typst_base: Arc<TypstEssentials>, source: &str) -> anyhow::Result<Vec<u8>> {
-    let mut source = source.to_owned();
+    let mut source = source.to_string();
 
     source.insert_str(0, typst_base.preamble().as_str());
     let to_compile = ToCompile::new(typst_base, source.clone());
