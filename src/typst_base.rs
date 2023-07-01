@@ -1,4 +1,5 @@
 use comemo::Prehashed;
+use once_cell::sync::Lazy;
 use std::convert::TryInto;
 use std::path::Path;
 use std::sync::Arc;
@@ -240,3 +241,6 @@ impl std::fmt::Display for RenderErrors {
 }
 
 impl std::error::Error for RenderErrors {}
+
+pub(crate) static TYPST_BASE: Lazy<Arc<TypstEssentials>> =
+    Lazy::new(|| Arc::new(TypstEssentials::new()));

@@ -16,7 +16,7 @@ use crate::translate::available_langs::{lingua_to_deepl_source, lingua_to_deepl_
 
 /// Translate a message from the given source language (or None, to autodetect) to the given target
 /// language. Returns an error if DeepL cannot be reached or an error response is returned.
-pub(crate) async fn translate(
+pub(crate) async fn translate_content(
     msg: &str,
     source: Option<Language>,
     target: Language,
@@ -86,7 +86,7 @@ mod tests {
     #[tokio::test]
     async fn test_translate() {
         assert_eq!(
-            translate("hello world", Some(Language::English), Language::Spanish)
+            translate_content("hello world", Some(Language::English), Language::Spanish)
                 .await
                 .unwrap(),
             "hola mundo".to_string()
