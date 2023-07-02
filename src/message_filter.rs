@@ -1,6 +1,6 @@
 //! Message filtering logic.
 
-use crate::{translate::detection::detect_language, typst_main::catch_typst_message};
+use crate::{math_markup::catch_typst_message, translate::detection::detect_language};
 use lingua::Language;
 use poise::serenity_prelude::Message;
 use pomsky_macro::pomsky;
@@ -74,7 +74,7 @@ pub(crate) async fn get_message_type(message: &Message, ctx: &Context) -> Messag
         }
     }
 
-    if let Some(s) = catch_typst_message(&message.content) {
+    if let Some(s) = catch_typst_message(&message.content, &message.author) {
         return MessageType::Typst(s);
     }
 

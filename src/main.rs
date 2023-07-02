@@ -2,14 +2,13 @@ mod ask;
 mod config;
 mod dictionary;
 mod geolocation;
+mod math_markup;
 mod message_filter;
 mod message_handler;
 mod rep;
 mod say;
 mod trace_moe;
 mod translate;
-mod typst_base;
-mod typst_main;
 mod utils;
 mod weather;
 mod wiki;
@@ -41,6 +40,7 @@ async fn main() {
                 rep::reputation(),
                 say::say(),
                 trace_moe::find_anime_source(),
+                math_markup::set_default_math_markup(),
                 weather::weather(),
                 wiki::wiki(),
             ],

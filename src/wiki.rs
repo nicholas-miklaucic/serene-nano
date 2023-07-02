@@ -106,8 +106,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_summary() {
-        assert!(summary("Horseshoe_theory").await.unwrap().starts_with(
-            "In popular discourse, the horseshoe theory asserts that the extreme left"
-        ));
+        assert!(summary("Horseshoe_theory")
+            .await
+            .unwrap()
+            .extract
+            .starts_with(
+                "In popular discourse, the horseshoe theory asserts that the extreme left"
+            ));
     }
 }

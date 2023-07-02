@@ -1,7 +1,6 @@
 use comemo::Prehashed;
 use once_cell::sync::Lazy;
 use std::convert::TryInto;
-use std::path::Path;
 use std::sync::Arc;
 use typst::diag::{FileResult, SourceError};
 use typst::eval::Library;

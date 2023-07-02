@@ -1,32 +1,34 @@
-use crate::config::{TYPST_CLOSE_DELIM, TYPST_OPEN_DELIM};
+use crate::{
+    config::{REDIS_URL, TYPST_CLOSE_DELIM, TYPST_OPEN_DELIM},
+    utils::{Context, Error},
+};
+use poise::{serenity_prelude::User, ChoiceParameter};
+use redis::{Commands, ErrorKind, FromRedisValue, RedisError, RedisResult, ToRedisArgs};
 use regex::{escape, Regex};
 
 use std::io::Cursor;
 use std::sync::Arc;
 use typst::geom::RgbaColor;
 
-use crate::typst_base::{
+use crate::math_markup::typst_base::{
     determine_pixels_per_point, Preamble, RenderErrors, ToCompile, TypstEssentials,
 };
+
+use super::preferred_markup::MathMarkup;
 
 /// Returns None if a message is not identifiable as Typst. If the message is
 /// identifiable as Typst, then the cleaned message suitable for Typst rendering
 /// is returned instead.
-pub(crate) fn catch_typst_message(msg: &str) -> Option<String> {
-    let typst_re = Regex::new(
-        format!(
-            r"(?s).*{}.*\S+.*{}.*",
-            escape(TYPST_OPEN_DELIM),
-            escape(TYPST_CLOSE_DELIM)
-        )
-        .as_str(),
-    )
-    .unwrap();
+pub(crate) fn catch_typst_message(msg: &str, author: &User) -> Option<String> {
+    let pref = crate::math_markup::get_preferred_markup(&author).unwrap_or_default();
+    let (open, close) = match pref {
+        MathMarkup::Typst => ("$", "$"),
+        MathMarkup::Latex => (TYPST_OPEN_DELIM, TYPST_CLOSE_DELIM),
+    };
+    let typst_re =
+        Regex::new(format!(r"(?s).*{}.*\S+.*{}.*", escape(open), escape(close)).as_str()).unwrap();
     if typst_re.is_match(msg) {
-        Some(
-            msg.replace(TYPST_OPEN_DELIM, "$")
-                .replace(TYPST_CLOSE_DELIM, "$"),
-        )
+        Some(msg.replace(open, "$").replace(close, "$"))
     } else {
         None
     }
