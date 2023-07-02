@@ -9,14 +9,16 @@ use serenity::prelude::Context;
 use std::sync::OnceLock;
 
 const THANK_RE_PATTERN: &str = pomsky!(
-    | "than" "k"|"x"|"ks" ($ | %)
-    | "tysm"
-    | (^ | %) "ty" ($ | %)
+(^ | %)
+(| ("than" ("k"|"x"|"ks"))
+ | "tysm"
+ | "ty")
+($ | %)
 );
 
 //             Regex::new(r"(?i)(good bot)|(good job)|(nice work)|(nailed it)|(nice job)")
 const GOOD_RE_PATTERN: &str = pomsky!(
-    | ("good" | "nice" | "awesome") " " ("bot" | "job" | "work")
+    ("good" | "nice" | "awesome") " " ("bot" | "job" | "work")
 );
 
 static THANK_RE: OnceLock<Regex> = OnceLock::new();
@@ -47,7 +49,7 @@ pub(crate) async fn get_message_type(message: &Message, ctx: &Context) -> Messag
                 .build()
                 .unwrap()
         });
-        if thank_re.is_match(&message.content) {
+        if dbg!(thank_re).is_match(&message.content) {
             return MessageType::Thank;
         }
 
