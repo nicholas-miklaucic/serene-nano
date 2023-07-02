@@ -41,6 +41,7 @@ async fn main() {
                 say::say(),
                 trace_moe::find_anime_source(),
                 math_markup::set_default_math_markup(),
+                math_markup::typst(),
                 weather::weather(),
                 wiki::wiki(),
             ],

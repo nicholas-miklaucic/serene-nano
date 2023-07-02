@@ -16,7 +16,7 @@ use serenity::utils::MessageBuilder;
 
 use std::time::Duration;
 
-use crate::math_markup::{catch_typst_message, render, TYPST_BASE};
+use crate::math_markup::{catch_typst_message, render_str, TYPST_BASE};
 use crate::utils::Error;
 
 use serenity::{self, model::channel::Message, prelude::*};
@@ -62,7 +62,7 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
             let mut typst_reply = _new_message
                 .channel_id
                 .send_message(&_ctx.http, |m| {
-                    match crate::math_markup::render(TYPST_BASE.clone(), typst_src.as_str()) {
+                    match crate::math_markup::render_str(TYPST_BASE.clone(), typst_src.as_str()) {
                         Ok(im) => m.add_file(AttachmentType::Bytes {
                             data: im.into(),
                             filename: "Rendered.png".into(),
@@ -93,7 +93,7 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
                 {
                     typst_reply
                         .edit(&_ctx, |m| {
-                            match render(TYPST_BASE.clone(), new_typst_content.as_str()) {
+                            match render_str(TYPST_BASE.clone(), new_typst_content.as_str()) {
                                 Ok(im) => m
                                     .remove_existing_attachment(prev_img_id)
                                     .content("")

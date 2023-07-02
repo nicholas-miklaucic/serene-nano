@@ -1,9 +1,12 @@
 use crate::{
-    config::{REDIS_URL, TYPST_CLOSE_DELIM, TYPST_OPEN_DELIM},
+    config::{TYPST_CLOSE_DELIM, TYPST_OPEN_DELIM},
+    math_markup::TYPST_BASE,
     utils::{Context, Error},
 };
-use poise::{serenity_prelude::User, ChoiceParameter};
-use redis::{Commands, ErrorKind, FromRedisValue, RedisError, RedisResult, ToRedisArgs};
+use poise::{
+    serenity_prelude::{AttachmentType, User},
+    ChoiceParameter,
+};
 use regex::{escape, Regex};
 
 use std::io::Cursor;
@@ -20,7 +23,7 @@ use super::preferred_markup::MathMarkup;
 /// identifiable as Typst, then the cleaned message suitable for Typst rendering
 /// is returned instead.
 pub(crate) fn catch_typst_message(msg: &str, author: &User) -> Option<String> {
-    let pref = crate::math_markup::get_preferred_markup(&author).unwrap_or_default();
+    let pref = crate::math_markup::get_preferred_markup(author).unwrap_or_default();
     let (open, close) = match pref {
         MathMarkup::Typst => ("$", "$"),
         MathMarkup::Latex => (TYPST_OPEN_DELIM, TYPST_CLOSE_DELIM),
@@ -34,7 +37,11 @@ pub(crate) fn catch_typst_message(msg: &str, author: &User) -> Option<String> {
     }
 }
 
-pub(crate) fn render(typst_base: Arc<TypstEssentials>, source: &str) -> anyhow::Result<Vec<u8>> {
+/// Renders a string. Used internally.
+pub(crate) fn render_str(
+    typst_base: Arc<TypstEssentials>,
+    source: &str,
+) -> anyhow::Result<Vec<u8>> {
     let mut source = source.to_string();
 
     source.insert_str(0, typst_base.preamble().as_str());
@@ -63,4 +70,88 @@ pub(crate) fn render(typst_base: Arc<TypstEssentials>, source: &str) -> anyhow::
     let image = writer.into_inner();
 
     Ok(image)
+}
+
+/// Parent command for rendering Typst code. Does nothing on its own.
+#[poise::command(prefix_command, slash_command, subcommands("render", "equation"))]
+pub(crate) async fn typst(_ctx: Context<'_>) -> Result<(), Error> {
+    Ok(())
+}
+
+/// Renders Typst markup. To include math, use `$`: padding with a space sets
+/// display.
+#[poise::command(
+    prefix_command,
+    slash_command,
+    track_edits,
+    invoke_on_edit,
+    reuse_response,
+    track_deletion
+)]
+pub(crate) async fn render(
+    ctx: Context<'_>,
+    #[description = "Code to render. $ used for math."]
+    #[rest]
+    code: String,
+) -> Result<(), Error> {
+    let im = render_str(TYPST_BASE.clone(), code.as_str())?;
+    let _typst_reply = ctx
+        .channel_id()
+        .send_message(&ctx.serenity_context().http, |m| {
+            m.add_file(AttachmentType::Bytes {
+                data: im.into(),
+                filename: "Rendered.png".into(),
+            })
+            .content(format!("`{}`", code))
+        })
+        .await?;
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, ChoiceParameter)]
+/// The math rendering mode for Typst code.
+pub(crate) enum RenderMode {
+    Display,
+    Inline,
+}
+
+impl Default for RenderMode {
+    fn default() -> Self {
+        Self::Display
+    }
+}
+
+/// Renders a Typst equation: $ not needed.
+#[poise::command(
+    prefix_command,
+    slash_command,
+    track_edits,
+    invoke_on_edit,
+    reuse_response,
+    track_deletion
+)]
+
+pub(crate) async fn equation(
+    ctx: Context<'_>,
+    #[description = "Whether to render display: default true."] display: Option<RenderMode>,
+    #[description = "Math code to render, $ not needed."]
+    #[rest]
+    code: String,
+) -> Result<(), Error> {
+    let eqn_code = match display.unwrap_or_default() {
+        RenderMode::Display => format!("$ {code} $"),
+        RenderMode::Inline => format!("${code}$"),
+    };
+    let im = render_str(TYPST_BASE.clone(), eqn_code.as_str())?;
+    let _typst_reply = ctx
+        .channel_id()
+        .send_message(&ctx.serenity_context().http, |m| {
+            m.add_file(AttachmentType::Bytes {
+                data: im.into(),
+                filename: "Rendered.png".into(),
+            })
+            .content(format!("`{}`", &code))
+        })
+        .await?;
+    Ok(())
 }
