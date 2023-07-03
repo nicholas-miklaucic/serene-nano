@@ -95,16 +95,14 @@ pub(crate) async fn render(
     code: String,
 ) -> Result<(), Error> {
     let im = render_str(TYPST_BASE.clone(), code.as_str())?;
-    let _typst_reply = ctx
-        .channel_id()
-        .send_message(&ctx.serenity_context().http, |m| {
-            m.add_file(AttachmentType::Bytes {
+    ctx.send(|m| {
+        m.content(format!("`{}`", &code))
+            .attachment(AttachmentType::Bytes {
                 data: im.into(),
                 filename: "Rendered.png".into(),
             })
-            .content(format!("`{}`", code))
-        })
-        .await?;
+    })
+    .await?;
     Ok(())
 }
 
@@ -143,15 +141,13 @@ pub(crate) async fn equation(
         RenderMode::Inline => format!("${code}$"),
     };
     let im = render_str(TYPST_BASE.clone(), eqn_code.as_str())?;
-    let _typst_reply = ctx
-        .channel_id()
-        .send_message(&ctx.serenity_context().http, |m| {
-            m.add_file(AttachmentType::Bytes {
+    ctx.send(|m| {
+        m.content(format!("`{}`", &code))
+            .attachment(AttachmentType::Bytes {
                 data: im.into(),
                 filename: "Rendered.png".into(),
             })
-            .content(format!("`{}`", &code))
-        })
-        .await?;
+    })
+    .await?;
     Ok(())
 }
