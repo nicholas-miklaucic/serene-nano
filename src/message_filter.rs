@@ -79,7 +79,9 @@ pub(crate) async fn get_message_type(message: &Message, ctx: &Context) -> Messag
     if let Some(s) = catch_typst_message(&message.content, &message.author) {
         return MessageType::Typst(s);
     }
-
+    if message.content.contains("http") {
+        return MessageType::Normal;
+    }
     match detect_language(&message.content) {
         Some(Language::English) | None => MessageType::Normal,
         Some(other) => MessageType::Translate(other),

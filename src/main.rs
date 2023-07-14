@@ -71,7 +71,7 @@ async fn main() {
                     ctx,
                     &framework.options().commands,
                     // Nano's Lab server
-                    GuildId(1079226248263368814),
+                    GuildId(823589317833523281),
                 )
                 .await?;
                 Ok(())
