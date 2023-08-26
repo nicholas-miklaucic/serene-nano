@@ -66,7 +66,7 @@ pub(crate) fn detect_language(msg: &str) -> Option<Language> {
 
     let best_lang = conf_vals
         .iter()
-        .max_by(|&(k1, v1), &(k2, v2)| {
+        .max_by(|&(_k1, v1), &(_k2, v2)| {
             if (v1 - v2).is_sign_negative() {
                 Ordering::Less
             } else if (v2 - v1).is_sign_negative() {
