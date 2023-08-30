@@ -63,19 +63,15 @@ pub(crate) async fn translate_content(
             .and_then(|v| v.get(0).ok_or(anyhow!("Translation list empty")).cloned())
     });
 
-    result.map(|res| match res.detected_source_language {
-        Some(src) => {
-            if source.is_none() {
-                format!(
-                    "Translated from {}:\n{}",
-                    src.to_string(),
-                    res.text.unwrap_or_default()
-                )
-            } else {
+    dbg!(result).map(|res| match res.detected_source_language {
+        Some(src) if res.text.as_ref() == Some(&src.to_string()) => {
+            format!(
+                "Translated from {}:\n{}",
+                src.to_string(),
                 res.text.unwrap_or_default()
-            }
+            )
         }
-        None => res.text.unwrap_or_default(),
+        _ => res.text.unwrap_or_default(),
     })
 }
 
