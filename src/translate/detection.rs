@@ -12,7 +12,7 @@ use regex::Regex;
 use regex::RegexBuilder;
 
 const URL_PATTERN: &str =
-    r#"((https?|ftp|smtp):\/\/)?(www.)?[a-z0-9]+\.[a-z]+(\/[a-zA-Z0-9#]+\/?)*"#;
+    r#"((https?|ftp|smtp):\/\/)?(www.)?[a-z0-9]+\.[a-z]+(\/[a-zA-Z0-9#?=]+\/?)*"#;
 
 const EMOJI_PATTERN: &str = r#"<a?:\w+:\d+>"#;
 
@@ -84,7 +84,7 @@ pub(crate) fn detect_language(msg: &str) -> Option<Language> {
     {
         None
     } else if conf_vals.get(&Language::English).unwrap_or(&0.0) * 5.0 <= *best_lang.1
-        && msg.len() >= 30
+        && filtered.len() > 30
     {
         Some(*best_lang.0)
     } else {
