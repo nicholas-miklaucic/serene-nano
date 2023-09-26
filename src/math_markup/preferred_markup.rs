@@ -14,8 +14,8 @@ use std::sync::Arc;
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, ChoiceParameter)]
 /// The preferred math markup to use inside dollar signs.
 pub(crate) enum MathMarkup {
-    Latex,
     Typst,
+    Latex,
 }
 
 impl Default for MathMarkup {
