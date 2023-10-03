@@ -123,6 +123,12 @@ impl Preamble for TypstEssentials {
 
 #let infty = [#sym.infinity];
 
+#let di = [#math.dif i];
+#let du = [#math.dif u];
+#let dr = [#math.dif r];
+#let ds = [#math.dif s];
+#let dt = [#math.dif t];
+#let dx = [#math.dif x];
 #let dx = [#math.dif x];
 #let dy = [#math.dif y];
 #let dz = [#math.dif z];
