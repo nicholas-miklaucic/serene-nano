@@ -20,7 +20,7 @@ pub(crate) enum MathMarkup {
 
 impl Default for MathMarkup {
     fn default() -> Self {
-        Self::Latex
+        Self::Typst
     }
 }
 
