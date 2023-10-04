@@ -11,10 +11,9 @@ use lingua::LanguageDetectorBuilder;
 use regex::Regex;
 use regex::RegexBuilder;
 
-const URL_PATTERN: &str =
-    r#"((https?|ftp|smtp):\/\/)?(www.)?[a-z0-9]+\.[a-z]+(\/[a-zA-Z0-9#?=]+\/?)*"#;
+const URL_PATTERN: &str = r#"((https?|ftp|smtp):\/\/)?(www.)?[^ ]+\.[^ ]+"#;
 
-const EMOJI_PATTERN: &str = r#"<a?:\w+:\d+>"#;
+const EMOJI_PATTERN: &str = r#"(<a?:\w+:\d+>)|[\p{Emoji}]"#;
 
 static URL_RE: OnceLock<Regex> = OnceLock::new();
 static EMOJI_RE: OnceLock<Regex> = OnceLock::new();
