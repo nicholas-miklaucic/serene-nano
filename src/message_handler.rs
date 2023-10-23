@@ -56,7 +56,17 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
                 Language::English,
             )
             .await?;
-            _new_message.reply(&_ctx, res).await?;
+
+            if edit_distance::edit_distance(&_new_message.content, &res) >= 2 {
+                _new_message.reply(&_ctx, res).await?;
+            } else {
+                println!(
+                    "Tried to translate {:?}\n{:?} -> English, but was too close to original:\n{:?}",
+                    &_new_message.content,
+                    other_language,
+                    &res
+                )
+            }
         }
         MessageType::Typst(typst_src) => {
             let mut typst_reply = _new_message

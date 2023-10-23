@@ -27,6 +27,7 @@ poise = "0.5.5"
 anyhow = "1.0.71"
 scraper = "0.17.1"
 pomsky-macro = "0.10.0"
+edit-distance = "2.1.0"
 
 [dependencies.serenity]
 default-features = false
