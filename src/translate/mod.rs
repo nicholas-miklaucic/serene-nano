@@ -3,4 +3,5 @@
 pub(crate) mod available_langs;
 pub(crate) mod detection;
 pub(crate) mod translation;
+pub(crate) use translation::translate;
 pub(crate) use translation::translate_content;

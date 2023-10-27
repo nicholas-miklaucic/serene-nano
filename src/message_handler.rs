@@ -50,7 +50,7 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
                 .await?;
         }
         MessageType::Translate(other_language) => {
-            let res = translate::translate_content(
+            let (_src, res) = translate::translate_content(
                 &_new_message.content,
                 Some(other_language),
                 Language::English,
