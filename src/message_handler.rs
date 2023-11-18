@@ -57,7 +57,7 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
             )
             .await?;
 
-            if edit_distance::edit_distance(&_new_message.content, &res) >= 2 {
+            if edit_distance::edit_distance(&_new_message.content, &res) >= 6 {
                 _new_message.reply(&_ctx, res).await?;
             } else {
                 println!(
