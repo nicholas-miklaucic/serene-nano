@@ -12,7 +12,10 @@ use lingua::Language;
 
 use std::env;
 
-use crate::translate::available_langs::{lingua_to_deepl_source, lingua_to_deepl_target};
+use crate::{
+    translate::available_langs::{lingua_to_deepl_source, lingua_to_deepl_target},
+    utils::{Context, Error},
+};
 
 /// Translate a message from the given source language (or None, to autodetect) to the given target
 /// language. Returns an error if DeepL cannot be reached or an error response is returned.
@@ -20,7 +23,7 @@ pub(crate) async fn translate_content(
     msg: &str,
     source: Option<Language>,
     target: Language,
-) -> Result<String> {
+) -> Result<(String, String)> {
     let client = reqwest::Client::new();
 
     // setting this to an invalid key will trigger a request error which saves me having to make a
@@ -65,14 +68,49 @@ pub(crate) async fn translate_content(
 
     dbg!(result).map(|res| match res.detected_source_language {
         Some(src) if res.text.as_ref() == Some(&src.to_string()) => {
-            format!(
-                "Translated from {}:\n{}",
-                src.to_string(),
-                res.text.unwrap_or_default()
-            )
+            (src.to_string(), res.text.unwrap_or_default())
         }
-        _ => res.text.unwrap_or_default(),
+        _ => (
+            "None".to_string(),
+            format!("{}", res.text.unwrap_or_default()),
+        ),
     })
+}
+
+/// Translates a message from one language to another.
+#[poise::command(
+    slash_command,
+    prefix_command,
+    track_edits,
+    invoke_on_edit,
+    reuse_response,
+    track_deletion,
+    aliases("tl")
+)]
+pub(crate) async fn translate(
+    ctx: Context<'_>,
+    #[description = "The target language (defaults to English)"] target: Option<Language>,
+    #[description = "The source language (defaults to autodetection)"] source: Option<Language>,
+    #[description = "The message to translate"]
+    #[rest]
+    message: String,
+) -> Result<(), Error> {
+    let target = target.unwrap_or(Language::English);
+    let (source, translation) = translate_content(&message, source, target).await?;
+    let reply = format!(
+        "Translated{} to {:?}\n## Source:\n{}\n## Translation:\n{}",
+        match source.as_str() {
+            "None" => "".to_string(),
+            src => format!(" from {} ", src),
+        },
+        target,
+        message,
+        translation
+    );
+
+    ctx.say(reply).await?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -84,7 +122,8 @@ mod tests {
         assert_eq!(
             translate_content("hello world", Some(Language::English), Language::Spanish)
                 .await
-                .unwrap(),
+                .unwrap()
+                .1,
             "hola mundo".to_string()
         );
     }

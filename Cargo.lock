@@ -666,6 +666,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "edit-distance"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbbaaaf38131deb9ca518a274a45bfdb8771f139517b073b16c2d3d32ae5037b"
+
+[[package]]
 name = "ego-tree"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1896,6 +1902,7 @@ dependencies = [
  "bytemuck",
  "comemo",
  "deepl-openapi",
+ "edit-distance",
  "image",
  "lingua",
  "once_cell",
