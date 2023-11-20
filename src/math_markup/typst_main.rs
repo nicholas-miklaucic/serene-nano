@@ -11,10 +11,11 @@ use regex::{escape, Regex};
 
 use std::io::Cursor;
 use std::sync::Arc;
-use typst::geom::RgbaColor;
+use typst::{eval::Tracer, geom::Color};
 
 use crate::math_markup::typst_base::{
-    determine_pixels_per_point, Preamble, RenderErrors, ToCompile, TypstEssentials,
+    determine_pixels_per_point, format_diagnostics, Preamble, RenderErrors, ToCompile,
+    TypstEssentials,
 };
 
 use super::preferred_markup::MathMarkup;
@@ -41,18 +42,20 @@ pub(crate) fn catch_typst_message(msg: &str, author: &User) -> Option<String> {
 pub(crate) fn render_str(
     typst_base: Arc<TypstEssentials>,
     source: &str,
-) -> anyhow::Result<Vec<u8>> {
+) -> Result<Vec<u8>, RenderErrors> {
     let mut source = source.to_string();
 
     source.insert_str(0, typst_base.preamble().as_str());
     let to_compile = ToCompile::new(typst_base, source.clone());
-    let document = typst::compile(&to_compile).map_err(|errs| RenderErrors::SourceError(*errs))?;
+    let mut tracer = Tracer::default();
+    let document = typst::compile(&to_compile, &mut tracer)
+        .map_err(|errs| format_diagnostics(&to_compile, &errs))?;
 
     let frame = document.pages.get(0).ok_or(RenderErrors::NoPageError)?;
 
     let pixel_per_point = dbg!(determine_pixels_per_point(frame.size())?);
 
-    let pixmap = typst::export::render(frame, pixel_per_point, RgbaColor::new(0, 0, 0, 0).into());
+    let pixmap = typst::export::render(frame, pixel_per_point, Color::from_u8(0, 0, 0, 0));
 
     let mut writer = Cursor::new(Vec::new());
 

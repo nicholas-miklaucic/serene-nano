@@ -16,8 +16,8 @@ serde_json = { version = "1.0" }
 rand = "0.8.4"
 serenity-additions = "0.3.4"
 deepl-openapi = "2.7.1"
-typst = { git = "https://github.com/typst/typst" }
-typst-library = { git = "https://github.com/typst/typst" }
+typst = { git = "https://github.com/typst/typst" , rev = "7bb4f6df44086b4c1120b227f7ae963e6c2ad5ab"}
+typst-library = { git = "https://github.com/typst/typst" , rev = "7bb4f6df44086b4c1120b227f7ae963e6c2ad5ab"}
 comemo = "0.3.0"
 time = "0.3.22"
 image = { version = "0.24", default_features = false, features = ["png"] }

@@ -2,13 +2,13 @@ use comemo::Prehashed;
 use once_cell::sync::Lazy;
 use std::convert::TryInto;
 use std::sync::Arc;
-use typst::diag::{FileResult, SourceError};
+use typst::diag::{FileError, FileResult, SourceDiagnostic};
+use typst::eval::Bytes;
 use typst::eval::Library;
-use typst::file::FileId;
 use typst::font::{Font, FontBook};
 use typst::geom::Size;
+use typst::syntax::FileId;
 use typst::syntax::Source;
-use typst::util::Bytes;
 
 pub(crate) trait Preamble {
     fn preamble(&self) -> String;
@@ -170,18 +170,18 @@ pub(crate) struct ToCompile {
     time: time::OffsetDateTime,
 }
 
-fn string2source(source: String) -> Source {
-    Source::new(FileId::detached(), source)
-}
-
 impl ToCompile {
     pub(crate) fn new(te: Arc<TypstEssentials>, source: String) -> Self {
         ToCompile {
             typst_essentials: te,
-            source: string2source(source),
+            source: Source::detached(source),
             time: time::OffsetDateTime::now_utc(),
         }
     }
+}
+
+pub(crate) fn format_diagnostics(tc: &ToCompile, errs: &[SourceDiagnostic]) -> RenderErrors {
+    todo!()
 }
 
 impl typst::World for ToCompile {
@@ -190,7 +190,7 @@ impl typst::World for ToCompile {
     }
 
     fn file(&self, _id: FileId) -> FileResult<Bytes> {
-        Err(typst::diag::FileError::Other)
+        Err(typst::diag::FileError::Other(None))
     }
 
     fn font(&self, id: usize) -> Option<Font> {
@@ -217,7 +217,7 @@ impl typst::World for ToCompile {
 
 #[derive(Debug, Clone)]
 pub(crate) enum RenderErrors {
-    SourceError(Vec<SourceError>),
+    SourceError(Vec<FileError>),
     NoPageError,
     PageSizeTooBig,
 }
@@ -237,7 +237,7 @@ impl std::fmt::Display for RenderErrors {
                     "{}",
                     err.iter()
                         .fold(String::from("Syntax error(s):\n"), |acc, se| acc
-                            + se.message.as_str()
+                            + se.to_string().as_str()
                             + "\n")
                 )
             }
