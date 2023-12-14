@@ -48,7 +48,7 @@ pub(crate) async fn ask(
     // in slash commands, can't see message: add message in quotes
     let response: String = match ctx.prefix() {
         // slash command
-        "/" => format!(">>> {}\n\n\n{}", &question, &choice),
+        "/" => format!("> {}\n\n{}", &question.replace('\n', "\n>"), &choice),
         _ => format!("{}", &choice),
     };
 
