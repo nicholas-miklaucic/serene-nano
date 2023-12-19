@@ -39,6 +39,7 @@ async fn main() {
                 rep::leaderboard(),
                 rep::reputation(),
                 say::say(),
+                say::mocking_case(),
                 trace_moe::find_anime_source(),
                 translate::translate(),
                 math_markup::set_default_math_markup(),
@@ -72,7 +73,7 @@ async fn main() {
                     ctx,
                     &framework.options().commands,
                     // Nano's Lab server
-                    GuildId(1079226248263368814),
+                    GuildId(823589317833523281),
                 )
                 .await?;
                 Ok(())

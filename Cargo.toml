@@ -16,8 +16,8 @@ serde_json = { version = "1.0" }
 rand = "0.8.4"
 serenity-additions = "0.3.4"
 deepl-openapi = "2.7.1"
-typst = { git = "https://github.com/typst/typst" }
-typst-library = { git = "https://github.com/typst/typst" }
+typst = { git = "https://github.com/typst/typst" , rev = "70ca0d257bb4ba927f63260e20443f244e0bb58c"}
+typst-render= { git = "https://github.com/typst/typst" , rev = "70ca0d257bb4ba927f63260e20443f244e0bb58c"}
 comemo = "0.3.0"
 time = "0.3.22"
 image = { version = "0.24", default_features = false, features = ["png"] }
@@ -28,6 +28,7 @@ anyhow = "1.0.71"
 scraper = "0.17.1"
 pomsky-macro = "0.10.0"
 edit-distance = "2.1.0"
+toml = "0.8.8"
 
 [dependencies.serenity]
 default-features = false
