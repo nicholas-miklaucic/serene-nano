@@ -69,14 +69,16 @@ async fn main() {
             Box::pin(async move {
                 ctx.set_activity(Activity::playing("with Sakamoto")).await;
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-                poise::builtins::register_in_guild(
-                    ctx,
-                    &framework.options().commands,
-                    // Nano's Lab server
-                    GuildId(823589317833523281),
-                )
-                .await?;
-                Ok(())
+                // set up testing servers
+                for guild_id in vec![823589317833523281, 1079226248263368814] {
+                    poise::builtins::register_in_guild(
+                        ctx,
+                        &framework.options().commands,
+                        GuildId(guild_id),
+                    )
+                    .await?;
+                    Ok(())
+                }
             })
         });
 
