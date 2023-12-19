@@ -1,26 +1,20 @@
 use comemo::Prehashed;
-
-use once_cell::unsync::Lazy;
-// use once_cell::sync::Lazy
-use poise::structs;
-use regex::{self, Regex};
-use std::cell::{RefCell, RefMut};
-use std::collections::HashMap;
-use std::convert::TryInto;
-use std::fs;
-use std::ops::DerefMut;
-use std::path::PathBuf;
-use std::rc::Rc;
-use std::sync::Arc;
-use toml::Table;
+use image::ImageDecoder;
+use once_cell::sync::Lazy;
+use serenity::futures::lock::Mutex;
+use std::cell::RefCell;
+use std::io::Cursor;
+use std::sync::OnceLock;
 use typst::diag::{FileError, FileResult, Severity, SourceDiagnostic, SourceResult};
-use typst::diag::{PackageError, PackageResult};
+use typst::eval::Tracer;
 use typst::foundations::{Bytes, Datetime};
+use typst::layout::{Abs, Axes};
 use typst::syntax::{FileId, PackageSpec, PackageVersion, Source};
 use typst::text::{Font, FontBook};
 use typst::Library;
 
 //Needed for reading files for packages
+#[derive(Clone)]
 struct FileEntry {
     bytes: Bytes,
     source: Option<Source>,
@@ -37,7 +31,6 @@ fn get_fonts() -> Vec<Font> {
         })
         .collect()
 }
-
 /*
 To explain the package layout; because this might not be obvious
 packages/
@@ -69,23 +62,33 @@ impl FileEntry {
     }
 }
 
-//The rewrite of TypstEssentials
-struct WithoutSource {
+pub(crate) struct TypstRendered {
     library: Prehashed<Library>,
     fontbook: Prehashed<FontBook>,
     fonts: Vec<Font>,
     files: RefCell<Vec<(FileId, FileEntry)>>, //This used to be a hashmap, but bruh, there are like 3 to 5 files here maximum, its easier to traverse a list
+    source: Option<Source>,
 }
-
-struct WithSource {
-    base: Arc<WithoutSource>,
-    source: Source,
-}
-
-impl WithSource {
-    fn file_entry(&mut self, id: FileId) -> FileResult<&FileEntry> {
+impl TypstRendered {
+    pub(crate) fn new() -> Self {
+        let fonts = get_fonts();
+        Self {
+            library: Prehashed::new(Library::build()),
+            fontbook: Prehashed::new(FontBook::from_fonts(&fonts)),
+            fonts,
+            files: RefCell::new(Vec::new()),
+            source: None,
+        }
+    }
+    fn from_file_id(&self, file_id: &FileId) -> Option<FileEntry> {
+        self.files
+            .take()
+            .iter()
+            .find_map(|(a, b)| if a == file_id { Some(b.clone()) } else { None })
+    }
+    fn file_entry(&self, id: &FileId) -> FileResult<FileEntry> {
         //Check if file is already in vector
-        if let Some(a) = self.base.from_file_id(&id) {
+        if let Some(a) = self.from_file_id(&id) {
             return Ok(a);
         }
 
@@ -109,84 +112,11 @@ impl WithSource {
             bytes: contents.into(),
             source: None,
         };
-
-        self.base.new_entry((id, fe));
-        self.base.files.push((id.clone(), fe));
+        self.files.borrow_mut().push((id.clone(), fe));
+        // self.files.push((id.clone(), fe));
         //Should return the above file_entry, and there should be an easy way to do it, but i dont know;
 
-        Ok(self.base.from_file_id(&id).unwrap())
-    }
-}
-
-impl typst::World for WithSource {
-    #[doc = " The standard library."]
-    #[doc = ""]
-    #[doc = " Can be created through `Library::build()`."]
-    fn library(&self) -> &Prehashed<Library> {
-        &self.base.library
-    }
-
-    #[doc = " Metadata about all known fonts."]
-    fn book(&self) -> &Prehashed<FontBook> {
-        &self.base.fontbook
-    }
-
-    #[doc = " Access the main source file."]
-    fn main(&self) -> Source {
-        self.source.clone()
-    }
-
-    #[doc = " Try to access the specified source file."]
-    fn source(&self, id: FileId) -> FileResult<Source> {
-        if id == self.source.id() {
-            return Ok(self.source.clone());
-        } else {
-            if let Ok(a) = self.file_entry(id) {}
-        }
-
-        todo!()
-    }
-
-    #[doc = " Try to access the specified file."]
-    fn file(&self, id: FileId) -> FileResult<Bytes> {
-        todo!()
-    }
-
-    #[doc = " Try to access the font with the given index in the font book."]
-    fn font(&self, index: usize) -> Option<Font> {
-        self.base.fonts.get(index).cloned()
-    }
-
-    #[doc = " Get the current date."]
-    #[doc = ""]
-    #[doc = " If no offset is specified, the local date should be chosen. Otherwise,"]
-    #[doc = " the UTC date should be chosen with the corresponding offset in hours."]
-    #[doc = ""]
-    #[doc = " If this function returns `None`, Typst\'s `datetime` function will"]
-    #[doc = " return an error."]
-    fn today(&self, offset: Option<i64>) -> Option<Datetime> {
-        None
-    }
-}
-
-impl WithoutSource {
-    fn from_file_id(&self, file_id: &FileId) -> Option<&FileEntry> {
-        self.files
-            .iter()
-            .find_map(|(a, b)| if a == file_id { Some(b) } else { None })
-    }
-    fn new() -> Self {
-        let fonts = get_fonts();
-        Self {
-            library: Prehashed::new(Library::build()),
-            fontbook: Prehashed::new(FontBook::from_fonts(&fonts)),
-            fonts,
-            files: Vec::new(),
-        }
-    }
-
-    fn new_entry(&mut self, t: (FileId, FileEntry)) {
-        self.files.push(t);
+        Ok(self.from_file_id(&id).unwrap().clone())
     }
     fn preamble() -> String {
         let imports = r#"
@@ -248,62 +178,162 @@ impl WithoutSource {
         "#;
         imports.to_string() + theme + page_size + text_options + math_remaining
     }
-}
+    fn add_source(&mut self, src: &str) {
+        self.source = Some(Source::detached(Self::preamble() + src))
+    }
+    fn revert(&mut self) {
+        self.source = None;
+    }
 
-static TYPST_BASE: Lazy<Rc<WithoutSource>> = Lazy::new(|| Rc::new(WithoutSource::new()));
+    pub(crate) fn render(&mut self, msg: &str) -> Result<Vec<u8>, RenderErrors> {
+        self.add_source(msg);
+        let mut tracer = Tracer::default();
+        let document =
+            typst::compile(self, &mut tracer).map_err(|e| RenderErrors::SourceError(e.to_vec()))?;
+        let frame = document.pages.get(0).ok_or(RenderErrors::NoPageError)?;
+        let pixels = determine_pixels_per_point(frame.size())?;
 
-fn with_source(source: &str) -> WithSource {
-    WithSource {
-        base: TYPST_BASE.clone(),
-        source: Source::detached(WithoutSource::preamble() + source),
+        let pixmap = typst_render::render(
+            frame,
+            pixels as f32,
+            typst::visualize::Color::from_u8(0, 0, 0, 0),
+        );
+
+        let mut writer = Cursor::new(Vec::new());
+
+        image::write_buffer_with_format(
+            &mut writer,
+            bytemuck::cast_slice(pixmap.pixels()),
+            pixmap.width(),
+            pixmap.height(),
+            image::ColorType::Rgba8,
+            image::ImageFormat::Png,
+        )
+        .unwrap();
+
+        let image = writer.into_inner();
+
+        Ok(image)
     }
 }
 
-//Wanted to check if the logic was sound
-#[cfg(test)]
-mod sample_tests {
-    use super::*;
-    #[test]
-    fn test_regex() {
-        let name_package = Regex::new(r"(\w+)-((\d+)\.(\d+)\.(\d+))").unwrap();
-        let s = "whalogen-0.11.1";
-        let Some(a) = name_package.captures(s) else {
-            assert!(false);
-            return;
-        };
-        assert_eq!("whalogen", &a[1]);
-        assert_eq!("0.11.1", &a[2]);
-        assert_eq!("0", &a[3]);
-        assert_eq!("11", &a[4]);
-        assert_eq!("1", &a[5]);
+fn determine_pixels_per_point(size: Axes<Abs>) -> Result<f64, RenderErrors> {
+    let desired_resolution = 2000.0;
+    let max_size = 10000.0;
+    let max_pixels_per_point = 15.0;
 
-        let captured_strings = name_package.captures(s).unwrap();
-        let pv = PackageVersion {
-            major: captured_strings[3].parse::<u32>().unwrap(),
-            minor: captured_strings[4].parse::<u32>().unwrap(),
-            patch: captured_strings[5].parse::<u32>().unwrap(),
-        };
+    let x = size.x.to_pt();
+    let y = size.y.to_pt();
 
-        let ps = PackageSpec {
-            namespace: "preview".into(),
-            name: captured_strings[1].into(),
-            version: pv,
-        };
-        assert_eq!(pv.to_string(), "0.11.1");
+    if x > max_size || y > max_size {
+        Err(RenderErrors::PageSizeTooBig)
+    } else {
+        let area = x * y;
+        Ok((desired_resolution / area.sqrt()).min(max_pixels_per_point))
+    }
+}
 
-        assert_eq!(ps.version, pv);
+impl typst::World for TypstRendered {
+    #[doc = " The standard library."]
+    #[doc = ""]
+    #[doc = " Can be created through `Library::build()`."]
+    fn library(&self) -> &Prehashed<Library> {
+        &self.library
     }
 
-    #[test]
-    fn test_folders() {
-        let mut packages_path = std::path::PathBuf::new();
-        packages_path.push("packages");
-        let m = std::fs::read_dir(packages_path).unwrap();
-        let mut v = m.into_iter();
-        let Some(Ok(p)) = v.next() else {
-            assert!(false);
-            return;
-        };
-        assert_eq!(p.file_name(), "whalogen-0.1.0");
+    #[doc = " Metadata about all known fonts."]
+    fn book(&self) -> &Prehashed<FontBook> {
+        &self.fontbook
     }
+
+    #[doc = " Access the main source file."]
+    fn main(&self) -> Source {
+        let Some(e) = &self.source else {
+            unreachable!()
+        };
+        e.clone()
+    }
+
+    #[doc = " Try to access the specified source file."]
+    fn source(&self, id: FileId) -> FileResult<Source> {
+        if id == self.main().id() {
+            return Ok(self.main());
+        }
+        self.file_entry(&id)
+            .map_err(|_| FileError::NotSource)
+            .and_then(|f| f.clone().source(id))
+    }
+
+    #[doc = " Try to access the specified file."]
+    fn file(&self, id: FileId) -> FileResult<Bytes> {
+        return self
+            .file_entry(&id)
+            .map_err(|_| FileError::NotSource)
+            .map(|f| f.clone().bytes);
+    }
+
+    #[doc = " Try to access the font with the given index in the font book."]
+    fn font(&self, index: usize) -> Option<Font> {
+        self.fonts.get(index).cloned()
+    }
+
+    #[doc = " Get the current date."]
+    #[doc = ""]
+    #[doc = " If no offset is specified, the local date should be chosen. Otherwise,"]
+    #[doc = " the UTC date should be chosen with the corresponding offset in hours."]
+    #[doc = ""]
+    #[doc = " If this function returns `None`, Typst\'s `datetime` function will"]
+    #[doc = " return an error."]
+    fn today(&self, offset: Option<i64>) -> Option<Datetime> {
+        None
+    }
+}
+#[derive(Debug)]
+pub(crate) enum RenderErrors {
+    SourceError(Vec<SourceDiagnostic>),
+    NoPageError,
+    PageSizeTooBig,
+}
+
+impl std::fmt::Display for RenderErrors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RenderErrors::SourceError(e) => {
+                let mut s = String::new();
+                let a = e.into_iter().fold(s, |acc, x| {
+                    let q = x
+                        .hints
+                        .clone()
+                        .into_iter()
+                        .fold(String::new(), |acc, e| acc + e.as_str());
+                    let ret = match x.severity {
+                        Severity::Error => acc + "Error:",
+                        Severity::Warning => acc + "Warning:",
+                    } + " "
+                        + x.message.as_str()
+                        + "\nHints (if any):"
+                        + q.as_str();
+                    return ret;
+                });
+                write!(f, "{a}")
+            }
+            RenderErrors::NoPageError => {
+                write!(f, "No pages found...")
+            }
+            RenderErrors::PageSizeTooBig => {
+                write!(f, "Page too big...")
+            }
+        }
+    }
+}
+
+impl std::error::Error for RenderErrors {}
+
+fn typst_init() -> &'static Mutex<TypstRendered> {
+    static TYPST: OnceLock<Mutex<TypstRendered>> = OnceLock::new();
+    TYPST.get_or_init(|| Mutex::new(TypstRendered::new()))
+}
+
+pub(crate) async fn typst_render(msg: &str) -> Result<Vec<u8>, RenderErrors> {
+    typst_init().lock().await.render(msg)
 }

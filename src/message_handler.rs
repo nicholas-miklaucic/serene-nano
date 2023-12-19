@@ -16,7 +16,7 @@ use serenity::utils::MessageBuilder;
 
 use std::time::Duration;
 
-use crate::math_markup::{catch_typst_message, render_str};
+use crate::math_markup::{catch_typst_message, typst_render};
 use crate::utils::Error;
 
 use serenity::{self, model::channel::Message, prelude::*};
@@ -69,16 +69,17 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
             }
         }
         MessageType::Typst(typst_src) => {
+            let res = crate::math_markup::typst_render(typst_src.as_str()).await;
             let mut typst_reply = _new_message
                 .channel_id
                 .send_message(&_ctx.http, |m| {
-                    // match crate::math_markup::render_str(TYPST_BASE.clone(), typst_src.as_str()) {
-                    //     Ok(im) => m.add_file(AttachmentType::Bytes {
-                    //         data: im.into(),
-                    //         filename: "Rendered.png".into(),
-                    //     }),
-                    //     Err(e) => m.content(format!("`n{}n`\n{}", typst_src, e)),
-                    // }
+                    match res {
+                        Ok(im) => m.add_file(AttachmentType::Bytes {
+                            data: im.into(),
+                            filename: "Rendered.png".into(),
+                        }),
+                        Err(e) => m.content(format!("`n{}n`\n{}", typst_src, e)),
+                    };
                     todo!()
                 })
                 .await?;
@@ -91,6 +92,8 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
                 }
             };
 
+            let prev_img_id_clone = prev_img_id.clone();
+
             let mut collector = EventCollectorBuilder::new(_ctx)
                 .add_event_type(EventType::MessageUpdate)
                 .add_message_id(_new_message.id)
@@ -102,19 +105,17 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
                 if let Some(new_typst_content) =
                     catch_typst_message(e.content.clone().unwrap().as_str(), &_new_message.author)
                 {
+                    let res = typst_render(new_typst_content.as_str()).await;
                     typst_reply
-                        .edit(&_ctx, |m| {
-                            // match render_str(TYPST_BASE.clone(), new_typst_content.as_str()) {
-                            //     Ok(im) => m
-                            //         .remove_existing_attachment(prev_img_id)
-                            //         .content("")
-                            //         .attachment(AttachmentType::Bytes {
-                            //             data: im.into(),
-                            //             filename: "Rendered.png".into(),
-                            //         }),
-                            //     Err(e) => m.content(format!("`n{}n`\n{}", typst_src, e)),
-                            // }
-                            todo!()
+                        .edit(&_ctx, |m| match res {
+                            Ok(im) => m
+                                .remove_existing_attachment(prev_img_id_clone)
+                                .content("")
+                                .attachment(AttachmentType::Bytes {
+                                    data: im.into(),
+                                    filename: "Rendered.png".into(),
+                                }),
+                            Err(e) => m.content(format!("`n{}n`\n{}", typst_src, e)),
                         })
                         .await?;
                     prev_img_id = match typst_reply.attachments.get(0) {
