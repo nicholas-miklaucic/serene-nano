@@ -72,15 +72,12 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
             let res = crate::math_markup::typst_render(typst_src.as_str()).await;
             let mut typst_reply = _new_message
                 .channel_id
-                .send_message(&_ctx.http, |m| {
-                    match res {
-                        Ok(im) => m.add_file(AttachmentType::Bytes {
-                            data: im.into(),
-                            filename: "Rendered.png".into(),
-                        }),
-                        Err(e) => m.content(format!("`n{}n`\n{}", typst_src, e)),
-                    };
-                    todo!()
+                .send_message(&_ctx.http, |m| match res {
+                    Ok(im) => m.add_file(AttachmentType::Bytes {
+                        data: im.into(),
+                        filename: "Rendered.png".into(),
+                    }),
+                    Err(e) => m.content(format!("`n{}n`\n{}", typst_src, e)),
                 })
                 .await?;
 
