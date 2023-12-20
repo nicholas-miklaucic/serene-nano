@@ -112,7 +112,9 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
                                     data: im.into(),
                                     filename: "Rendered.png".into(),
                                 }),
-                            Err(e) => m.content(format!("`n{}n`\n{}", typst_src, e)),
+                            Err(e) => m
+                                .remove_existing_attachment(prev_img_id_clone)
+                                .content(format!("`n{}n`\n{}", new_typst_content, e)),
                         })
                         .await?;
                     prev_img_id = match typst_reply.attachments.get(0) {
