@@ -16,6 +16,9 @@ use super::preferred_markup::MathMarkup;
 /// is returned instead.
 pub(crate) fn catch_typst_message(msg: &str, author: &User) -> Option<String> {
     let pref = crate::math_markup::get_preferred_markup(author).unwrap_or_default();
+    if msg.contains("#ce") {
+        return Some(msg.to_string());
+    }
     let (open, close) = match pref {
         MathMarkup::Typst => ("$", "$"),
         MathMarkup::Latex => (TYPST_OPEN_DELIM, TYPST_CLOSE_DELIM),
@@ -51,8 +54,6 @@ pub(crate) async fn render(
     #[rest]
     code: String,
 ) -> Result<(), Error> {
-    // todo!();
-
     let im = typst_render(code.as_str()).await?;
 
     ctx.send(|m| {

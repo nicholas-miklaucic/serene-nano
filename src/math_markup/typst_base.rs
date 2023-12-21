@@ -306,13 +306,14 @@ impl std::fmt::Display for RenderErrors {
                         .hints
                         .clone()
                         .into_iter()
-                        .fold(String::new(), |acc, e| acc + e.as_str());
+                        .filter(|a| !a.as_str().trim().is_empty())
+                        .fold(String::new(), |acc, e| acc + e.as_str() + "\n");
                     let ret = match x.severity {
                         Severity::Error => acc + "Error:",
                         Severity::Warning => acc + "Warning:",
                     } + " "
                         + x.message.as_str()
-                        + "\nHints (if any):"
+                        + if (!q.is_empty()) { "\nHints:" } else { "" }
                         + q.as_str();
                     return ret;
                 });
