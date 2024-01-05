@@ -89,8 +89,6 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
                 }
             };
 
-            let prev_img_id_clone = prev_img_id.clone();
-
             let mut collector = EventCollectorBuilder::new(_ctx)
                 .add_event_type(EventType::MessageUpdate)
                 .add_message_id(_new_message.id)
@@ -106,14 +104,14 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
                     typst_reply
                         .edit(&_ctx, |m| match res {
                             Ok(im) => m
-                                .remove_existing_attachment(prev_img_id_clone)
+                                .remove_existing_attachment(prev_img_id)
                                 .content("")
                                 .attachment(AttachmentType::Bytes {
                                     data: im.into(),
                                     filename: "Rendered.png".into(),
                                 }),
                             Err(e) => m
-                                .remove_existing_attachment(prev_img_id_clone)
+                                .remove_existing_attachment(prev_img_id)
                                 .content(format!("`n{}n`\n{}", new_typst_content, e)),
                         })
                         .await?;
