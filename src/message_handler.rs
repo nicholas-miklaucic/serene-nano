@@ -77,7 +77,10 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
                         data: im.into(),
                         filename: "Rendered.png".into(),
                     }),
-                    Err(e) => m.content(format!("`n{}n`\n{}", typst_src, e)),
+                    Err(e) => {
+                        println!("`n{}n`\n{}", typst_src, e);
+                        m.content(format!("`n{}n`\n{}", typst_src, e))
+                    }
                 })
                 .await?;
 
