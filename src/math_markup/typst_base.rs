@@ -82,7 +82,7 @@ impl TypstRendered {
     }
     fn from_file_id(&self, file_id: &FileId) -> Option<FileEntry> {
         self.files
-            .take()
+            .borrow()
             .iter()
             .find_map(|(a, b)| if a == file_id { Some(b.clone()) } else { None })
     }
@@ -97,6 +97,13 @@ impl TypstRendered {
             .package()
             .ok_or(FileError::NotFound(id.vpath().as_rootless_path().into()))?;
 
+        println!(
+            "Loading new file: {}, {} - {} is the size of list of files",
+            p.name.as_str(),
+            id.vpath().as_rooted_path().to_str().unwrap_or("oopsie!"),
+            // self.files.borrow_mut().len()
+            12
+        );
         let mut dir = std::path::PathBuf::new();
         dir.push("packages");
         let package_folder = format!(
@@ -161,7 +168,13 @@ impl TypstRendered {
             #let dx = [#math.dif x];
             #let dy = [#math.dif y];
             #let dz = [#math.dif z];
-
+            #let ddt = [#math.frac([#math.dif], dt)];
+            #let ddx = [#math.frac([#math.dif], dx)];
+            #let ddy = [#math.frac([#math.dif], dy)];
+            #let ddz = [#math.frac([#math.dif], dz)];
+            #let ddu = [#math.frac([#math.dif], du)];
+            #let ddv = [#math.frac([#math.dif], dv)];
+            
             #let int = [#sym.integral]
             #let iint = [#sym.integral.double]
             #let infty = [#sym.infinity]
