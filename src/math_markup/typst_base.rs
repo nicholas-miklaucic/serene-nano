@@ -1,15 +1,13 @@
 use comemo::Prehashed;
-use image::ImageDecoder;
-use once_cell::sync::Lazy;
 use serenity::futures::lock::Mutex;
 use std::cell::RefCell;
 use std::io::Cursor;
 use std::sync::OnceLock;
-use typst::diag::{FileError, FileResult, Severity, SourceDiagnostic, SourceResult};
+use typst::diag::{FileError, FileResult, Severity, SourceDiagnostic};
 use typst::eval::Tracer;
 use typst::foundations::{Bytes, Datetime};
 use typst::layout::{Abs, Axes};
-use typst::syntax::{FileId, PackageSpec, PackageVersion, Source};
+use typst::syntax::{FileId, Source};
 use typst::text::{Font, FontBook};
 use typst::Library;
 
@@ -80,15 +78,15 @@ impl TypstRendered {
             source: None,
         }
     }
-    fn from_file_id(&self, file_id: &FileId) -> Option<FileEntry> {
+    fn file_id(&self, file_id: &FileId) -> Option<FileEntry> {
         self.files
-            .take()
+            .borrow()
             .iter()
             .find_map(|(a, b)| if a == file_id { Some(b.clone()) } else { None })
     }
     fn file_entry(&self, id: &FileId) -> FileResult<FileEntry> {
         //Check if file is already in vector
-        if let Some(a) = self.from_file_id(&id) {
+        if let Some(a) = self.file_id(id) {
             return Ok(a);
         }
 
@@ -97,6 +95,12 @@ impl TypstRendered {
             .package()
             .ok_or(FileError::NotFound(id.vpath().as_rootless_path().into()))?;
 
+        println!(
+            "Loading new file: {}, {} - {} is the size of list of files",
+            p.name.as_str(),
+            id.vpath().as_rooted_path().to_str().unwrap_or("oopsie!"),
+            self.files.borrow().len()
+        );
         let mut dir = std::path::PathBuf::new();
         dir.push("packages");
         let package_folder = format!(
@@ -112,16 +116,17 @@ impl TypstRendered {
             bytes: contents.into(),
             source: None,
         };
-        self.files.borrow_mut().push((id.clone(), fe));
+        self.files.borrow_mut().push((*id, fe));
         // self.files.push((id.clone(), fe));
         //Should return the above file_entry, and there should be an easy way to do it, but i dont know;
 
-        Ok(self.from_file_id(&id).unwrap().clone())
+        Ok(self.file_id(id).unwrap().clone())
     }
     fn preamble() -> String {
         let imports = r#"
             #import "@preview/whalogen:0.1.0": *
-        "#;
+            #import "@preview/mitex:0.2.1": *        
+            "#;
         let theme = r#"
             #let fg = rgb(219, 222, 225)
             #let bg = rgb(49, 51, 56)
@@ -158,10 +163,16 @@ impl TypstRendered {
             #let ds = [#math.dif s];
             #let dt = [#math.dif t];
             #let dx = [#math.dif x];
-            #let dx = [#math.dif x];
+            #let dv = [#math.dif v];
             #let dy = [#math.dif y];
             #let dz = [#math.dif z];
-
+            #let ddt = [#math.frac([#math.dif], dt)];
+            #let ddx = [#math.frac([#math.dif], dx)];
+            #let ddy = [#math.frac([#math.dif], dy)];
+            #let ddz = [#math.frac([#math.dif], dz)];
+            #let ddu = [#math.frac([#math.dif], du)];
+            #let ddv = [#math.frac([#math.dif], dv)];
+            
             #let int = [#sym.integral]
             #let iint = [#sym.integral.double]
             #let infty = [#sym.infinity]
@@ -190,7 +201,7 @@ impl TypstRendered {
         let mut tracer = Tracer::default();
         let document =
             typst::compile(self, &mut tracer).map_err(|e| RenderErrors::SourceError(e.to_vec()))?;
-        let frame = document.pages.get(0).ok_or(RenderErrors::NoPageError)?;
+        let frame = document.pages.first().ok_or(RenderErrors::NoPageError)?;
         let pixels = determine_pixels_per_point(frame.size())?;
 
         let pixmap = typst_render::render(
@@ -267,10 +278,9 @@ impl typst::World for TypstRendered {
 
     #[doc = " Try to access the specified file."]
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        return self
-            .file_entry(&id)
+        self.file_entry(&id)
             .map_err(|_| FileError::NotSource)
-            .map(|f| f.clone().bytes);
+            .map(|f| f.clone().bytes)
     }
 
     #[doc = " Try to access the font with the given index in the font book."]
@@ -285,7 +295,7 @@ impl typst::World for TypstRendered {
     #[doc = ""]
     #[doc = " If this function returns `None`, Typst\'s `datetime` function will"]
     #[doc = " return an error."]
-    fn today(&self, offset: Option<i64>) -> Option<Datetime> {
+    fn today(&self, _offset: Option<i64>) -> Option<Datetime> {
         None
     }
 }
@@ -300,8 +310,8 @@ impl std::fmt::Display for RenderErrors {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RenderErrors::SourceError(e) => {
-                let mut s = String::new();
-                let a = e.into_iter().fold(s, |acc, x| {
+                let s = String::new();
+                let a = e.iter().fold(s, |acc, x| {
                     let q = x
                         .hints
                         .clone()
@@ -313,9 +323,9 @@ impl std::fmt::Display for RenderErrors {
                         Severity::Warning => acc + "Warning:",
                     } + " "
                         + x.message.as_str()
-                        + if (!q.is_empty()) { "\nHints:" } else { "" }
+                        + if !q.is_empty() { "\nHints:" } else { "" }
                         + q.as_str();
-                    return ret;
+                    ret
                 });
                 write!(f, "{a}")
             }

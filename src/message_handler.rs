@@ -16,23 +16,23 @@ use serenity::utils::MessageBuilder;
 
 use std::time::Duration;
 
-use crate::math_markup::{catch_typst_message, typst_render};
+use crate::math_markup::{catch_typst_message, render_math};
 use crate::utils::Error;
 
 use serenity::{self, model::channel::Message, prelude::*};
 
 /// Appropriately deals wih the different potential message types.
-pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Result<(), Error> {
-    match get_message_type(_new_message, _ctx).await {
+pub(crate) async fn handle_message(ctx: &Context, new_message: &Message) -> Result<(), Error> {
+    match get_message_type(new_message, ctx).await {
         MessageType::Normal | MessageType::BotMessage => {}
         MessageType::Thank => {
-            dbg!(&_new_message.content);
-            crate::rep::thank(_ctx, _new_message).await?;
+            dbg!(&new_message.content);
+            crate::rep::thank(ctx, new_message).await?;
         }
         MessageType::GoodNano => {
-            _new_message
+            new_message
                 .reply(
-                    &_ctx,
+                    &ctx,
                     MessageBuilder::new()
                         .push("https://i.imgur.com/bgiANhm.gif")
                         .build(),
@@ -40,9 +40,9 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
                 .await?;
         }
         MessageType::BadNano => {
-            _new_message
+            new_message
                 .reply(
-                    &_ctx,
+                    &ctx,
                     MessageBuilder::new()
                         .push("https://c.tenor.com/8QjR5hC91b0AAAAC/nichijou-nano.gif")
                         .build(),
@@ -51,37 +51,40 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
         }
         MessageType::Translate(other_language) => {
             let (_src, res) = translate::translate_content(
-                &_new_message.content,
+                &new_message.content,
                 Some(other_language),
                 Language::English,
             )
             .await?;
 
-            if edit_distance::edit_distance(&_new_message.content, &res) >= 6 {
-                _new_message.reply(&_ctx, res).await?;
+            if edit_distance::edit_distance(&new_message.content, &res) >= 6 {
+                new_message.reply(&ctx, res).await?;
             } else {
                 println!(
                     "Tried to translate {:?}\n{:?} -> English, but was too close to original:\n{:?}",
-                    &_new_message.content,
+                    &new_message.content,
                     other_language,
                     &res
                 )
             }
         }
         MessageType::Typst(typst_src) => {
-            let res = crate::math_markup::typst_render(typst_src.as_str()).await;
-            let mut typst_reply = _new_message
+            let res = render_math(typst_src.as_str(), &new_message.author).await;
+            let mut typst_reply = new_message
                 .channel_id
-                .send_message(&_ctx.http, |m| match res {
+                .send_message(&ctx.http, |m| match res {
                     Ok(im) => m.add_file(AttachmentType::Bytes {
                         data: im.into(),
                         filename: "Rendered.png".into(),
                     }),
-                    Err(e) => m.content(format!("`n{}n`\n{}", typst_src, e)),
+                    Err(e) => {
+                        println!("`n{}n`\n{}", typst_src, e);
+                        m.content(format!("`n{}n`\n{}", typst_src, e))
+                    }
                 })
                 .await?;
 
-            let mut prev_img_id = match typst_reply.attachments.get(0) {
+            let mut prev_img_id = match typst_reply.attachments.first() {
                 Some(img) => img.id,
                 None => {
                     println!("No image!");
@@ -89,20 +92,20 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
                 }
             };
 
-            let mut collector = EventCollectorBuilder::new(_ctx)
+            let mut collector = EventCollectorBuilder::new(ctx)
                 .add_event_type(EventType::MessageUpdate)
-                .add_message_id(_new_message.id)
+                .add_message_id(new_message.id)
                 .timeout(Duration::from_secs(180))
                 .build()
                 .unwrap();
 
             while let Some(Event::MessageUpdate(e)) = collector.next().await.as_deref() {
                 if let Some(new_typst_content) =
-                    catch_typst_message(e.content.clone().unwrap().as_str(), &_new_message.author)
+                    catch_typst_message(e.content.clone().unwrap().as_str())
                 {
-                    let res = typst_render(new_typst_content.as_str()).await;
+                    let res = render_math(new_typst_content.as_str(), &new_message.author).await;
                     typst_reply
-                        .edit(&_ctx, |m| match res {
+                        .edit(&ctx, |m| match res {
                             Ok(im) => m
                                 .remove_existing_attachment(prev_img_id)
                                 .content("")
@@ -115,7 +118,7 @@ pub(crate) async fn handle_message(_ctx: &Context, _new_message: &Message) -> Re
                                 .content(format!("`n{}n`\n{}", new_typst_content, e)),
                         })
                         .await?;
-                    prev_img_id = match typst_reply.attachments.get(0) {
+                    prev_img_id = match typst_reply.attachments.first() {
                         Some(img) => img.id,
                         None => {
                             println!("No image!");

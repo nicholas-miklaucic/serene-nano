@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use serenity::{builder::CreateMessage, http::CacheHttp};
+use serenity::builder::CreateMessage;
 use serenity_additions::menu::{MenuBuilder, Page};
 
 use crate::utils::{Context, Error};
@@ -30,21 +30,19 @@ impl DictionaryDefinition {
                     .clone()
                     .unwrap_or("No single pronunciation".to_string()),
             );
-            if let Some(url) = self.source_urls.get(0) {
+            if let Some(url) = self.source_urls.first() {
                 e = e.url(url);
             };
 
             e = e
                 .field(
                     "Pronunciations",
-                    format!(
-                        "{}",
-                        self.phonetics
-                            .iter()
-                            .map(|pro| pro.text.clone())
-                            .collect::<Vec<String>>()
-                            .join(", ")
-                    ),
+                    self.phonetics
+                        .iter()
+                        .map(|pro| pro.text.clone())
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                        .to_string(),
                     false,
                 )
                 .field(

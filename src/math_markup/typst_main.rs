@@ -1,34 +1,55 @@
 use crate::{
-    config::{TYPST_CLOSE_DELIM, TYPST_OPEN_DELIM},
-    math_markup::typst_render,
+    math_markup::{get_preferred_markup, set_preferred_markup, typst_base::typst_render},
     utils::{Context, Error},
 };
 use poise::{
     serenity_prelude::{AttachmentType, User},
     ChoiceParameter,
 };
-use regex::{escape, Regex};
+use regex::Regex;
 
 use super::preferred_markup::MathMarkup;
 
 /// Returns None if a message is not identifiable as Typst. If the message is
 /// identifiable as Typst, then the cleaned message suitable for Typst rendering
 /// is returned instead.
-pub(crate) fn catch_typst_message(msg: &str, author: &User) -> Option<String> {
-    let pref = crate::math_markup::get_preferred_markup(author).unwrap_or_default();
+pub(crate) fn catch_typst_message(msg: &str) -> Option<String> {
     if msg.contains("#ce") {
         return Some(msg.to_string());
     }
-    let (open, close) = match pref {
-        MathMarkup::Typst => ("$", "$"),
-        MathMarkup::Latex => (TYPST_OPEN_DELIM, TYPST_CLOSE_DELIM),
-    };
-    let typst_re =
-        Regex::new(format!(r"(?s).*{}.*\S+.*{}.*", escape(open), escape(close)).as_str()).unwrap();
-    if typst_re.is_match(msg) {
-        Some(msg.replace(open, "$").replace(close, "$"))
+    let math_check_regex = Regex::new(r"(?s).*\$.+\$.*").unwrap();
+    if math_check_regex.is_match(msg) {
+        Some(msg.to_string())
     } else {
         None
+    }
+}
+
+fn latex2typst(msg: &str) -> String {
+    "#mitext(`\n".to_string() + msg + "\n`)"
+}
+
+/// Checks if the text is latex or typst, presently just checking if there is a \ in between 2 $ signs and a non-whitespace immediately after; meh it works
+fn latex_or_typst(msg: &str) -> MathMarkup {
+    let latex_regex = Regex::new(r"(?s).*\$.*\\S.*\$.*").unwrap();
+    if latex_regex.is_match(msg) {
+        MathMarkup::Latex
+    } else {
+        MathMarkup::Typst
+    }
+}
+
+pub(crate) async fn render_math(
+    msg: &str,
+    author: &User,
+) -> Result<Vec<u8>, crate::math_markup::typst_base::RenderErrors> {
+    let pref = get_preferred_markup(author)
+        .unwrap()
+        .unwrap_or_else(|| latex_or_typst(msg));
+    // let pref = None;
+    match pref {
+        MathMarkup::Typst => typst_render(msg).await,
+        MathMarkup::Latex => typst_render(latex2typst(msg).as_str()).await,
     }
 }
 

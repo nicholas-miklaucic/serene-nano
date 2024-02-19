@@ -1,7 +1,5 @@
 //! Command to echo given input text.
 
-use std::sync::Arc;
-
 use serenity::utils::{content_safe, ContentSafeOptions};
 
 use crate::utils::{Context, Error};

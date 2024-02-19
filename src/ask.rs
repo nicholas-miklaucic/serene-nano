@@ -49,7 +49,7 @@ pub(crate) async fn ask(
     let response: String = match ctx.prefix() {
         // slash command
         "/" => format!("> {}\n\n{}", &question.replace('\n', "\n>"), &choice),
-        _ => format!("{}", &choice),
+        _ => choice.to_string(),
     };
 
     ctx.say(response).await?;
