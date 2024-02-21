@@ -159,6 +159,7 @@ impl TypstRendered {
 
             #let di = [#math.dif i];
             #let du = [#math.dif u];
+            #let dv = [#math.dif v];
             #let dr = [#math.dif r];
             #let ds = [#math.dif s];
             #let dt = [#math.dif t];
