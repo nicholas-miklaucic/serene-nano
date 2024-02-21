@@ -1,15 +1,11 @@
 //! Lets users configure the preferred markup.
 
 use crate::{
-    config::{REDIS_URL, TYPST_CLOSE_DELIM, TYPST_OPEN_DELIM},
+    config::REDIS_URL,
     utils::{Context, Error},
 };
 use poise::{serenity_prelude::User, ChoiceParameter};
 use redis::{Commands, ErrorKind, FromRedisValue, RedisError, RedisResult, ToRedisArgs};
-use regex::{escape, Regex};
-
-use std::io::Cursor;
-use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, ChoiceParameter)]
 /// The preferred math markup to use inside dollar signs.
@@ -55,14 +51,14 @@ impl ToRedisArgs for MathMarkup {
 const MATH_MARKUP: &str = "math_markup";
 
 /// Get the preferred markup language for a user.
-pub(crate) fn get_preferred_markup(user: &User) -> RedisResult<MathMarkup> {
+pub(crate) fn get_preferred_markup(user: &User) -> RedisResult<Option<MathMarkup>> {
     let mut client = redis::Client::open(REDIS_URL)?;
     let pref: Option<MathMarkup> = client.hget(MATH_MARKUP, &user.name)?;
-    Ok(pref.unwrap_or_default())
+    Ok(pref)
 }
 
 /// Set the preferred markup language for a user.
-fn set_preferred_markup(user: &User, pref: &MathMarkup) -> RedisResult<()> {
+pub(crate) fn set_preferred_markup(user: &User, pref: &MathMarkup) -> RedisResult<()> {
     let mut client = redis::Client::open(REDIS_URL)?;
     client.hset(MATH_MARKUP, &user.name, pref)?;
     Ok(())

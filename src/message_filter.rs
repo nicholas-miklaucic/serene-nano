@@ -76,7 +76,7 @@ pub(crate) async fn get_message_type(message: &Message, ctx: &Context) -> Messag
         }
     }
 
-    if let Some(s) = catch_typst_message(&message.content, &message.author) {
+    if let Some(s) = catch_typst_message(&message.content) {
         return MessageType::Typst(s);
     }
     match detect_language(&message.content) {
