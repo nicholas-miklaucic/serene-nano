@@ -174,9 +174,11 @@ impl TypstRendered {
             #let ddu = [#math.frac([#math.dif], du)];
             #let ddv = [#math.frac([#math.dif], dv)];
             
+            
             #let int = [#sym.integral]
             #let iint = [#sym.integral.double]
             #let infty = [#sym.infinity]
+            #let to = [#sym.arrow]
 
             #let mathbox(content) = {
               style(styles => {
