@@ -17,7 +17,7 @@ pub(crate) fn catch_typst_message(msg: &str) -> Option<String> {
     if msg.contains("#ce") {
         return Some(msg.to_string());
     }
-    let math_check_regex = Regex::new(r"(?s).*\$.+\$.*").unwrap();
+    let math_check_regex = Regex::new(r"(?s).*\$.+(\$[^0-9].*)|(\$)$").unwrap();
     if math_check_regex.is_match(msg) {
         Some(msg.to_string())
     } else {
