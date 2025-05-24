@@ -1,0 +1,5 @@
+#!/bin/bash
+
+source /home/nicholas/bin/source-nano
+cd /home/nicholas/programs/nano-bot
+cargo run --release

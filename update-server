@@ -1,0 +1,5 @@
+#!/bin/bash
+
+rsync -Pavr -e "ssh -i $HOME/.ssh/ibm_cloud_nine" ~/bin/source-* "nicholas@[2a01:4ff:f0:e861::1]:/home/nicholas/bin/"
+rsync -Pavr -e "ssh -i $HOME/.ssh/ibm_cloud_nine" --exclude "target" ~/programs/nano-bot "nicholas@[2a01:4ff:f0:e861::1]:/home/nicholas/"
+

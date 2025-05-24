@@ -70,7 +70,7 @@ async fn main() {
                 ctx.set_activity(Activity::playing("with Sakamoto")).await;
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
                 // set up testing servers
-                for guild_id in [823589317833523281, 1079226248263368814] {
+                for guild_id in [846580828942237736, 807797906132303901, 1079226248263368814] {
                     // for guild_id in [823589317833523281] {
                     poise::builtins::register_in_guild(
                         ctx,

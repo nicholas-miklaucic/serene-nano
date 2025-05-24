@@ -1,0 +1,106 @@
+565068:C 28 Nov 2021 22:32:33.825 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+565068:C 28 Nov 2021 22:32:33.825 # Redis version=6.2.5, bits=64, commit=00000000, modified=0, pid=565068, just started
+565068:C 28 Nov 2021 22:32:33.825 # Configuration loaded
+565068:M 28 Nov 2021 22:32:33.825 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+565068:M 28 Nov 2021 22:32:33.825 * monotonic clock: POSIX clock_gettime
+565068:M 28 Nov 2021 22:32:33.826 * Running mode=standalone, port=1234.
+565068:M 28 Nov 2021 22:32:33.826 # Server initialized
+565068:M 28 Nov 2021 22:32:33.826 # WARNING overcommit_memory is set to 0! Background save may fail under low memory condition. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+565068:M 28 Nov 2021 22:32:33.827 * Ready to accept connections
+565068:signal-handler (1638156771) Received SIGTERM scheduling shutdown...
+565068:M 28 Nov 2021 22:32:51.744 # User requested shutdown...
+565068:M 28 Nov 2021 22:32:51.744 * Saving the final RDB snapshot before exiting.
+565068:M 28 Nov 2021 22:32:51.746 * DB saved on disk
+565068:M 28 Nov 2021 22:32:51.746 # Redis is now ready to exit, bye bye...
+139165:C 05 Jan 2022 20:30:28.131 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+139165:C 05 Jan 2022 20:30:28.131 # Redis version=6.2.5, bits=64, commit=00000000, modified=0, pid=139165, just started
+139165:C 05 Jan 2022 20:30:28.131 # Configuration loaded
+139165:M 05 Jan 2022 20:30:28.132 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+139165:M 05 Jan 2022 20:30:28.132 * monotonic clock: POSIX clock_gettime
+139165:M 05 Jan 2022 20:30:28.132 # Warning: Could not create server TCP listening socket *:1234: bind: Address already in use
+139165:M 05 Jan 2022 20:30:28.132 # Failed listening on port 1234 (TCP), aborting.
+140595:C 05 Jan 2022 20:37:08.669 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+140595:C 05 Jan 2022 20:37:08.669 # Redis version=6.2.5, bits=64, commit=00000000, modified=0, pid=140595, just started
+140595:C 05 Jan 2022 20:37:08.669 # Configuration loaded
+140595:M 05 Jan 2022 20:37:08.670 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+140595:M 05 Jan 2022 20:37:08.670 * monotonic clock: POSIX clock_gettime
+140595:M 05 Jan 2022 20:37:08.670 # Warning: Could not create server TCP listening socket *:1234: bind: Address already in use
+140595:M 05 Jan 2022 20:37:08.670 # Failed listening on port 1234 (TCP), aborting.
+179365:C 05 Jan 2022 21:16:27.020 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+179365:C 05 Jan 2022 21:16:27.020 # Redis version=6.2.5, bits=64, commit=00000000, modified=0, pid=179365, just started
+179365:C 05 Jan 2022 21:16:27.020 # Configuration loaded
+179365:M 05 Jan 2022 21:16:27.021 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+179365:M 05 Jan 2022 21:16:27.021 * monotonic clock: POSIX clock_gettime
+179365:M 05 Jan 2022 21:16:27.021 # Warning: Could not create server TCP listening socket *:1234: bind: Address already in use
+179365:M 05 Jan 2022 21:16:27.021 # Failed listening on port 1234 (TCP), aborting.
+848909:C 18 Feb 2022 12:57:49.820 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+848909:C 18 Feb 2022 12:57:49.821 # Redis version=6.2.5, bits=64, commit=00000000, modified=0, pid=848909, just started
+848909:C 18 Feb 2022 12:57:49.821 # Configuration loaded
+848909:M 18 Feb 2022 12:57:49.821 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+848909:M 18 Feb 2022 12:57:49.821 * monotonic clock: POSIX clock_gettime
+848909:M 18 Feb 2022 12:57:49.822 * Running mode=standalone, port=1234.
+848909:M 18 Feb 2022 12:57:49.822 # Server initialized
+848909:M 18 Feb 2022 12:57:49.822 # WARNING overcommit_memory is set to 0! Background save may fail under low memory condition. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+848909:M 18 Feb 2022 12:57:49.822 * Loading RDB produced by version 6.2.5
+848909:M 18 Feb 2022 12:57:49.822 * RDB age 7050298 seconds
+848909:M 18 Feb 2022 12:57:49.822 * RDB memory usage when created 0.77 Mb
+848909:M 18 Feb 2022 12:57:49.822 * DB loaded from disk: 0.000 seconds
+848909:M 18 Feb 2022 12:57:49.822 * Ready to accept connections
+848909:signal-handler (1645208887) Received SIGTERM scheduling shutdown...
+848909:M 18 Feb 2022 13:28:07.805 # User requested shutdown...
+848909:M 18 Feb 2022 13:28:07.805 * Saving the final RDB snapshot before exiting.
+848909:M 18 Feb 2022 13:28:07.813 * DB saved on disk
+848909:M 18 Feb 2022 13:28:07.813 # Redis is now ready to exit, bye bye...
+853002:C 18 Feb 2022 13:28:10.017 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+853002:C 18 Feb 2022 13:28:10.017 # Redis version=6.2.5, bits=64, commit=00000000, modified=0, pid=853002, just started
+853002:C 18 Feb 2022 13:28:10.017 # Configuration loaded
+853002:M 18 Feb 2022 13:28:10.018 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+853002:M 18 Feb 2022 13:28:10.018 * monotonic clock: POSIX clock_gettime
+853002:M 18 Feb 2022 13:28:10.019 * Running mode=standalone, port=1234.
+853002:M 18 Feb 2022 13:28:10.019 # Server initialized
+853002:M 18 Feb 2022 13:28:10.019 # WARNING overcommit_memory is set to 0! Background save may fail under low memory condition. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+853002:M 18 Feb 2022 13:28:10.019 * Loading RDB produced by version 6.2.5
+853002:M 18 Feb 2022 13:28:10.019 * RDB age 3 seconds
+853002:M 18 Feb 2022 13:28:10.019 * RDB memory usage when created 0.77 Mb
+853002:M 18 Feb 2022 13:28:10.019 * DB loaded from disk: 0.000 seconds
+853002:M 18 Feb 2022 13:28:10.019 * Ready to accept connections
+853002:signal-handler (1645209153) Received SIGTERM scheduling shutdown...
+853002:M 18 Feb 2022 13:32:33.379 # User requested shutdown...
+853002:M 18 Feb 2022 13:32:33.379 * Saving the final RDB snapshot before exiting.
+853002:M 18 Feb 2022 13:32:33.387 * DB saved on disk
+853002:M 18 Feb 2022 13:32:33.387 # Redis is now ready to exit, bye bye...
+4443:C 23 Mar 2022 13:47:42.839 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+4443:C 23 Mar 2022 13:47:42.846 # Redis version=6.2.5, bits=64, commit=00000000, modified=0, pid=4443, just started
+4443:C 23 Mar 2022 13:47:42.846 # Configuration loaded
+4443:M 23 Mar 2022 13:47:42.847 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+4443:M 23 Mar 2022 13:47:42.847 * monotonic clock: POSIX clock_gettime
+4443:M 23 Mar 2022 13:47:42.848 # Warning: Could not create server TCP listening socket *:1234: bind: Address already in use
+4443:M 23 Mar 2022 13:47:42.848 # Failed listening on port 1234 (TCP), aborting.
+270433:C 29 Mar 2022 19:34:11.915 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+270433:C 29 Mar 2022 19:34:11.916 # Redis version=6.2.5, bits=64, commit=00000000, modified=0, pid=270433, just started
+270433:C 29 Mar 2022 19:34:11.916 # Configuration loaded
+270433:M 29 Mar 2022 19:34:11.916 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+270433:M 29 Mar 2022 19:34:11.916 * monotonic clock: POSIX clock_gettime
+270433:M 29 Mar 2022 19:34:11.916 # Warning: Could not create server TCP listening socket *:1234: bind: Address already in use
+270433:M 29 Mar 2022 19:34:11.916 # Failed listening on port 1234 (TCP), aborting.
+204506:C 09 Apr 2022 13:55:10.314 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+204506:C 09 Apr 2022 13:55:10.314 # Redis version=6.2.5, bits=64, commit=00000000, modified=0, pid=204506, just started
+204506:C 09 Apr 2022 13:55:10.314 # Configuration loaded
+204506:M 09 Apr 2022 13:55:10.316 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+204506:M 09 Apr 2022 13:55:10.316 * monotonic clock: POSIX clock_gettime
+204506:M 09 Apr 2022 13:55:10.317 # Warning: Could not create server TCP listening socket *:1234: bind: Address already in use
+204506:M 09 Apr 2022 13:55:10.317 # Failed listening on port 1234 (TCP), aborting.
+204635:C 09 Apr 2022 13:55:13.707 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+204635:C 09 Apr 2022 13:55:13.707 # Redis version=6.2.5, bits=64, commit=00000000, modified=0, pid=204635, just started
+204635:C 09 Apr 2022 13:55:13.707 # Configuration loaded
+204635:M 09 Apr 2022 13:55:13.708 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+204635:M 09 Apr 2022 13:55:13.708 * monotonic clock: POSIX clock_gettime
+204635:M 09 Apr 2022 13:55:13.709 # Warning: Could not create server TCP listening socket *:1234: bind: Address already in use
+204635:M 09 Apr 2022 13:55:13.709 # Failed listening on port 1234 (TCP), aborting.
+393888:C 24 Apr 2022 22:26:30.574 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+393888:C 24 Apr 2022 22:26:30.575 # Redis version=6.2.5, bits=64, commit=00000000, modified=0, pid=393888, just started
+393888:C 24 Apr 2022 22:26:30.575 # Configuration loaded
+393888:M 24 Apr 2022 22:26:30.577 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+393888:M 24 Apr 2022 22:26:30.577 * monotonic clock: POSIX clock_gettime
+393888:M 24 Apr 2022 22:26:30.577 # Warning: Could not create server TCP listening socket *:1234: bind: Address already in use
+393888:M 24 Apr 2022 22:26:30.577 # Failed listening on port 1234 (TCP), aborting.
